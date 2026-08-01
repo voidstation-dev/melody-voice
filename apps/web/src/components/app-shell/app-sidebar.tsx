@@ -50,6 +50,23 @@ export function AppSidebar() {
           {navItem("/", "Text to Speech", Mic, true)}
         </nav>
       </div>
+
+      <div className="p-4 border-t border-border mt-auto">
+        <div className="flex flex-col gap-1 rounded-xl bg-muted/50 p-4 border border-border/50">
+          <div className="flex items-center gap-2">
+            <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-primary">
+              <Flame className="w-3.5 h-3.5" />
+            </div>
+            <span className="font-bold text-sm text-foreground">Melody</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mt-2">
+            Created by VoidStation
+          </p>
+          <p className="text-[10px] text-muted-foreground/60">
+            v1.0.0
+          </p>
+        </div>
+      </div>
     </aside>
   );
 }

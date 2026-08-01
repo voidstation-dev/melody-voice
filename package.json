@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "dev:web": "pnpm --dir apps/web dev",
-    "dev:api": "uvicorn app.main:app --app-dir apps/api --reload --port 8000",
+    "dev:api": "cd apps/api && source .venv/bin/activate && uvicorn app.main:app --reload --port 8000",
     "lint:web": "pnpm --dir apps/web lint",
     "test:web": "pnpm --dir apps/web test",
     "test:api": "pytest apps/api/tests -v"
