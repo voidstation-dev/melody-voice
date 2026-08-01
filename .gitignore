@@ -1,0 +1,14 @@
+node_modules
+.venv
+__pycache__
+*.pyc
+.next
+dist
+data/app.db
+data/audio/*
+data/previews/*
+data/raw-responses/*
+!data/audio/.gitkeep
+!data/previews/.gitkeep
+!data/raw-responses/.gitkeep
+.env
