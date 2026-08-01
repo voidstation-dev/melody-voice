@@ -1,5 +1,8 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
 
+export function resolveApiUrl(path: string): string {
+  return `${API_BASE_URL}${path}`
+}
 export class ApiError extends Error {
   constructor(message: string, public status: number, public code?: string) {
     super(message)

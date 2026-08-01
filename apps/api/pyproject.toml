@@ -11,9 +11,17 @@ dependencies = [
     "httpx>=0.27.0",
     "python-multipart>=0.0.9",
     "tenacity>=8.2.0",
-    "greenlet>=3.0.0"
+    "greenlet>=3.0.0",
+    "alembic>=1.16.5",
+    "capcut-tts-api",
 ]
 
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]
+
+[tool.uv.sources]
+capcut-tts-api = { path = "../../vendor/capcut-tts-api" }

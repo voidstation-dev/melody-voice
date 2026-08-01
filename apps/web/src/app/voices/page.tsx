@@ -10,29 +10,33 @@ export default function VoicesPage() {
 
   return (
     <PageContainer>
-      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Voice Library</h1>
-          <p className="text-sm text-muted-foreground">Khám phá và nghe thử các giọng đọc sẵn có</p>
+      <div className="flex flex-col h-full">
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between shrink-0">
+          <div>
+            <h1 className="text-2xl font-bold">Voice Library</h1>
+            <p className="text-sm text-muted-foreground">Khám phá và nghe thử các giọng đọc sẵn có</p>
+          </div>
+          <input
+            type="text"
+            placeholder="Tìm giọng đọc..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="rounded-lg border border-border bg-card px-4 py-2 text-sm focus:outline-none"
+          />
         </div>
-        <input
-          type="text"
-          placeholder="Tìm giọng đọc..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="rounded-lg border border-border bg-card px-4 py-2 text-sm focus:outline-none"
-        />
-      </div>
 
-      {isLoading ? (
-        <div className="text-sm text-muted-foreground">Loading voices...</div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {data?.items.map((voice) => (
-            <VoiceCard key={voice.voiceType} voice={voice} />
-          ))}
+        <div className="flex-1 overflow-y-auto min-h-0 pr-2 pb-6">
+          {isLoading ? (
+            <div className="text-sm text-muted-foreground">Loading voices...</div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {data?.items.map((voice) => (
+                <VoiceCard key={voice.voiceType} voice={voice} />
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </PageContainer>
   )
 }

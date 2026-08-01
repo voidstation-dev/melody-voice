@@ -18,6 +18,10 @@ async def create_tts_job(
     resource_id: str | None = None,
     rate: float = 1.0,
     kind: str = "generation",
+    batch_id: str | None = None,
+    batch_position: int | None = None,
+    source_file_name: str | None = None,
+    source_file_size: int | None = None,
 ) -> TTSJobModel:
     cleaned_text = text.strip()
     job = TTSJobModel(
@@ -30,6 +34,10 @@ async def create_tts_job(
         language_code=language_code,
         rate=rate,
         status="queued",
+        batch_id=batch_id,
+        batch_position=batch_position,
+        source_file_name=source_file_name,
+        source_file_size=source_file_size,
     )
     session.add(job)
     await session.commit()

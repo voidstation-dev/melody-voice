@@ -3,10 +3,15 @@ import { useState, useEffect } from "react";
 import { TextComposer } from "./text-composer";
 import { VoiceSettingsPanel } from "./voice-settings-panel";
 import { useVoices } from "@/hooks/use-voices";
-import { useTTSJob } from "@/hooks/use-tts-job";
+import { useQueue } from "@/hooks/use-queue";
+import { useTextFileDrop } from "@/hooks/use-text-file-drop";
+import { TextImportConflictDialog } from "./text-import-conflict-dialog";
+import { JobQueueSidebar } from "./job-queue-sidebar";
+import { BatchImportModal } from "./batch-import-modal";
+import { ImportedTextFile, TextImportError } from "@/types/text-import";
 import { apiFetch } from "@/lib/api-client";
-import { TTSJob } from "@/types/tts-job";
-import { Sparkles, Loader2, Clipboard, FileUp } from "lucide-react";
+import { TTSJob, BatchJobCreateResponse } from "@/types/tts-job";
+import { Sparkles, Loader2, Clipboard, FileUp, FolderOpen } from "lucide-react";
 import { useRef } from "react";
 
 export function TTSStudio() {
@@ -15,62 +20,101 @@ export function TTSStudio() {
   const [rate, setRate] = useState(1.0);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [fakeProgress, setFakeProgress] = useState(0);
+  const [conflictDialog, setConflictDialog] = useState<{isOpen: boolean, file: ImportedTextFile | null}>({isOpen: false, file: null});
+  
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
+  const [batchFiles, setBatchFiles] = useState<ImportedTextFile[]>([]);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const { addToQueue } = useQueue();
+
+  const handleFiles = (files: ImportedTextFile[]) => {
+    if (files.length === 0) return;
+    
+    if (files.length === 1 && !batchModalOpen) {
+      const file = files[0];
+      if (text.trim().length > 0) {
+        setConflictDialog({ isOpen: true, file });
+      } else {
+        setText(file.text);
+      }
+    } else {
+      setBatchFiles(files);
+      setBatchModalOpen(true);
+    }
+  };
+
+  const handleErrors = (errors: TextImportError[]) => {
+    errors.forEach(err => alert(`Error importing ${err.fileName}: ${err.message}`));
+  };
+
+  const { isDragging, isValidDrag, dragProps, processFiles } = useTextFileDrop({
+    allowMultiple: true,
+    maxFileBytes: 10 * 1024 * 1024,
+    onFiles: handleFiles,
+    onErrors: handleErrors,
+  });
+
+  const handleFolderSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      await processFiles(Array.from(e.target.files));
+    }
+    if (folderInputRef.current) {
+      folderInputRef.current.value = "";
+    }
+  };
+
+  const handleStartBatchJobs = async (selectedFiles: ImportedTextFile[]) => {
+    const createdJobs = [];
+    // Generate a single batchId for all files in this batch so they group together in the queue
+    const batchId = crypto.randomUUID();
+    
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const file = selectedFiles[i];
+      try {
+        const batchResponse = await apiFetch<BatchJobCreateResponse>("/api/v1/tts/jobs", {
+          method: "POST",
+          body: JSON.stringify({
+            text: file.text,
+            voiceType: selectedVoice,
+            rate: file.speed ?? rate,
+            sourceFileName: file.fileName,
+            sourceFileSize: file.sizeBytes,
+            batchId: batchId,
+            batchPosition: i,
+          }),
+        });
+        createdJobs.push(...batchResponse.jobs);
+      } catch (err) {
+        console.error(`Failed to create job for ${file.fileName}`, err);
+      }
+    }
+    
+    if (createdJobs.length > 0) {
+      addToQueue(createdJobs);
+    }
+  };
 
   const { data: voiceData } = useVoices("vi-VN");
-  const { data: activeJob } = useTTSJob(activeJobId);
 
-  // Load from localStorage on mount
   useEffect(() => {
-    const savedText = localStorage.getItem("capvoice_text");
+    const savedText = localStorage.getItem("melody_text");
     if (savedText) setText(savedText);
-
-    const savedJobId = localStorage.getItem("capvoice_job_id");
-    if (savedJobId) setActiveJobId(savedJobId);
   }, []);
 
-  // Save to localStorage when changed
   useEffect(() => {
-    localStorage.setItem("capvoice_text", text);
+    localStorage.setItem("melody_text", text);
   }, [text]);
-
-  useEffect(() => {
-    if (activeJobId) {
-      localStorage.setItem("capvoice_job_id", activeJobId);
-    } else {
-      localStorage.removeItem("capvoice_job_id");
-    }
-  }, [activeJobId]);
-
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (activeJob?.status === "processing" || activeJob?.status === "queued") {
-      setIsSubmitting(true);
-      interval = setInterval(() => {
-        setFakeProgress((prev) => {
-          if (prev >= 95) return prev;
-          return prev + Math.floor(Math.random() * 4) + 1;
-        });
-      }, 800);
-    } else if (activeJob?.status === "completed") {
-      setIsSubmitting(false);
-      setFakeProgress(100);
-    } else if (activeJob?.status === "failed") {
-      setIsSubmitting(false);
-      setFakeProgress(0);
-    }
-    return () => clearInterval(interval);
-  }, [activeJob?.status]);
 
   const handleGenerate = async () => {
     if (!text.trim()) return;
     setIsSubmitting(true);
-    setFakeProgress(0);
     try {
       const currentVoiceObj = voiceData?.items?.find(
         (v) => v.voiceType === selectedVoice,
       );
-      const job = await apiFetch<TTSJob>("/api/v1/tts/jobs", {
+      const batchResponse = await apiFetch<BatchJobCreateResponse>("/api/v1/tts/jobs", {
         method: "POST",
         body: JSON.stringify({
           text,
@@ -79,14 +123,14 @@ export function TTSStudio() {
           rate,
         }),
       });
-      setActiveJobId(job.id);
+      addToQueue(batchResponse.jobs);
+      setText("");
     } catch (err) {
       console.error("Job creation failed", err);
+    } finally {
       setIsSubmitting(false);
     }
   };
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handlePaste = async () => {
     try {
@@ -101,20 +145,11 @@ export function TTSStudio() {
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      if (content) {
-        setText(text + (text ? "\n\n" : "") + content);
-      }
-    };
-    reader.readAsText(file);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length > 0) {
+      processFiles(files);
     }
+    e.target.value = "";
   };
 
   return (
@@ -148,6 +183,26 @@ export function TTSStudio() {
               onChange={handleFileUpload}
               className="hidden"
             />
+            
+            <button
+              onClick={() => folderInputRef.current?.click()}
+              disabled={isSubmitting}
+              className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-50"
+              title="Import folder of TXT files"
+            >
+              <FolderOpen className="h-4 w-4" />
+              <span className="hidden sm:inline">Import Folder</span>
+            </button>
+            <input
+              type="file"
+              ref={folderInputRef}
+              onChange={handleFolderSelect}
+              className="hidden"
+              // @ts-ignore - webkitdirectory is a valid property for folder selection
+              webkitdirectory=""
+              directory=""
+              multiple
+            />
           </div>
 
           <button
@@ -163,22 +218,44 @@ export function TTSStudio() {
           value={text}
           onChange={setText}
           maxLength={500000}
-          onGenerate={handleGenerate}
-          isSubmitting={isSubmitting}
+          disabled={isSubmitting}
+          isDragging={isDragging}
+          isValidDrag={isValidDrag}
+          dragProps={dragProps}
+        />
+        <TextImportConflictDialog
+          isOpen={conflictDialog.isOpen}
+          fileName={conflictDialog.file?.fileName || ""}
+          onClose={() => setConflictDialog({ isOpen: false, file: null })}
+          onReplace={() => {
+            setText(conflictDialog.file?.text || "");
+            setConflictDialog({ isOpen: false, file: null });
+          }}
+          onAppend={() => {
+            setText(text + (text ? "\n\n" : "") + (conflictDialog.file?.text || ""));
+            setConflictDialog({ isOpen: false, file: null });
+          }}
+        />
+        <BatchImportModal
+          isOpen={batchModalOpen}
+          onClose={() => setBatchModalOpen(false)}
+          files={batchFiles}
+          onStartJobs={handleStartBatchJobs}
         />
       </div>
-      <div className="h-full overflow-y-auto pr-2">
-        <VoiceSettingsPanel
-          voices={voiceData?.items ?? []}
-          selectedVoice={selectedVoice}
-          onSelectVoice={setSelectedVoice}
-          rate={rate}
-          onRateChange={setRate}
-          onGenerate={handleGenerate}
-          isSubmitting={isSubmitting}
-          activeJob={activeJob}
-          fakeProgress={fakeProgress}
-        />
+      <div className="h-full flex flex-col gap-4 min-h-0 pr-2">
+        <div className="shrink-0">
+          <VoiceSettingsPanel
+            voices={voiceData?.items ?? []}
+            selectedVoice={selectedVoice}
+            onSelectVoice={setSelectedVoice}
+            rate={rate}
+            onRateChange={setRate}
+            onGenerate={handleGenerate}
+            isSubmitting={isSubmitting}
+          />
+        </div>
+        <JobQueueSidebar />
       </div>
     </div>
   );

@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Voice } from "@/types/voice";
 import { RefreshCcw, Trash2, Info, ChevronDown, Check, Download } from "lucide-react";
+import { resolveApiUrl } from "@/lib/api-client";
 
 type VoiceSettingsPanelProps = {
   voices: Voice[];
@@ -11,8 +12,6 @@ type VoiceSettingsPanelProps = {
   onRateChange: (r: number) => void;
   onGenerate: () => void;
   isSubmitting: boolean;
-  activeJob?: any;
-  fakeProgress?: number;
 };
 
 const CustomSlider = ({
@@ -24,15 +23,32 @@ const CustomSlider = ({
   min = 0,
   max = 2,
   step = 0.1,
-}: any) => (
-  <div className="flex flex-col gap-1">
-    <div className="flex items-center justify-between">
-      <span className="text-sm font-bold text-foreground">{label}</span>
-      <div className="relative flex h-2 w-full max-w-[140px] items-center rounded-full bg-muted ml-4">
-        <div
-          className="h-full rounded-full bg-primary pointer-events-none"
-          style={{ width: `${((value - min) / (max - min)) * 100}%` }}
+}: any) => {
+  const percentage = ((value - min) / (max - min)) * 100;
+  
+  return (
+    <div className="flex flex-col gap-4 p-4 rounded-2xl bg-card border border-border shadow-sm">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-bold text-foreground">{label}</span>
+        <div className="px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-bold">
+          {value.toFixed(1)}x
+        </div>
+      </div>
+      
+      <div className="relative flex items-center h-6 w-full">
+        {/* Track background */}
+        <div className="absolute w-full h-1.5 top-1/2 -translate-y-1/2 rounded-full bg-muted pointer-events-none" />
+        {/* Track fill */}
+        <div 
+          className="absolute h-1.5 top-1/2 -translate-y-1/2 rounded-full bg-primary pointer-events-none"
+          style={{ width: `${percentage}%` }}
         />
+        {/* Custom Thumb */}
+        <div 
+          className="absolute h-4 w-4 bg-background border-2 border-primary rounded-full shadow-md pointer-events-none"
+          style={{ left: `calc(${percentage}% - 8px)` }}
+        />
+        {/* Interactive Invisible Input */}
         <input
           type="range"
           min={min}
@@ -40,16 +56,17 @@ const CustomSlider = ({
           step={step}
           value={value}
           onChange={(e) => onChange && onChange(parseFloat(e.target.value))}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
         />
       </div>
+      
+      <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+        <span>{left}</span>
+        <span>{right}</span>
+      </div>
     </div>
-    <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-      <span>{left}</span>
-      <span>{right}</span>
-    </div>
-  </div>
-);
+  );
+};
 
 export function VoiceSettingsPanel({
   voices,
@@ -59,8 +76,6 @@ export function VoiceSettingsPanel({
   onRateChange,
   onGenerate,
   isSubmitting,
-  activeJob,
-  fakeProgress,
 }: VoiceSettingsPanelProps) {
   const currentVoice = voices.find((v) => v.voiceType === selectedVoice);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -89,33 +104,38 @@ export function VoiceSettingsPanel({
         <div className="relative" ref={dropdownRef}>
           <div
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className={`relative rounded-2xl bg-card p-5 border ${isDropdownOpen ? "border-primary" : "border-border"} cursor-pointer hover:border-primary transition-colors`}
+            className={`group flex items-center justify-between rounded-2xl bg-card p-3 border transition-all cursor-pointer ${
+              isDropdownOpen 
+                ? "border-primary ring-4 ring-primary/10 shadow-sm" 
+                : "border-border hover:border-primary/50 hover:shadow-sm"
+            }`}
           >
-            <div className="mb-4 flex items-center justify-between">
-              <span className="rounded-md bg-[#ffece0] px-2 py-1 text-[10px] font-bold text-[#d96623]">
-                CLICK TO CHANGE
-              </span>
-              <ChevronDown
-                className={`h-5 w-5 text-muted-foreground transition-transform ${isDropdownOpen ? "rotate-180" : ""}`}
-              />
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
+                <div className="relative flex items-center justify-center">
+                  <div className="h-5 w-5 bg-current rounded-full" />
+                  <div className="absolute top-1/2 -left-1 h-2 w-1 bg-current rounded-r-md -translate-y-1/2" />
+                  <div className="absolute top-1/2 -right-1 h-2 w-1 bg-current rounded-l-md -translate-y-1/2" />
+                </div>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-base font-bold text-foreground">
+                  {currentVoice?.displayName || "Select a voice"}
+                </span>
+                <span className="text-xs font-medium text-muted-foreground">
+                  {currentVoice?.languageCode || "No voice selected"}
+                </span>
+              </div>
             </div>
-
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-14 w-14 rounded-2xl bg-muted/60 overflow-hidden flex items-center justify-center flex-shrink-0 p-2.5">
-                   <div className="h-full w-full bg-[#1a1a1a] rounded-full relative">
-                    <div className="absolute top-1/2 left-0 h-4 w-2 bg-[#1a1a1a] rounded-r-md -ml-1"></div>
-                    <div className="absolute top-1/2 right-0 h-4 w-2 bg-[#1a1a1a] rounded-l-md -mr-1"></div>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <div className="text-lg font-bold text-foreground line-clamp-1">
-                    {currentVoice?.displayName || "Select a voice"}
-                  </div>
-                  <div className="text-sm font-medium text-muted-foreground line-clamp-1">
-                    {currentVoice?.languageCode || "No voice selected"}
-                  </div>
-                </div>
+            
+            <div className="flex items-center gap-3 pr-2">
+              <span className="hidden sm:block text-[10px] font-bold uppercase tracking-wider text-primary opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                Change
+              </span>
+              <div className={`p-1 rounded-full transition-colors ${isDropdownOpen ? "bg-primary/10 text-primary" : "text-muted-foreground group-hover:text-foreground"}`}>
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`}
+                />
               </div>
             </div>
           </div>
@@ -180,60 +200,6 @@ export function VoiceSettingsPanel({
           />
         </div>
       </div>
-
-      {/* Generation Status Block */}
-      {activeJob && (
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm mt-4">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Generation Status</span>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-              activeJob.status === 'completed' ? 'bg-green-100 text-green-700' :
-              activeJob.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-[#ffece0] text-[#d96623]'
-            }`}>
-              {activeJob.status === 'processing' || activeJob.status === 'queued' ? 'PROCESSING' : activeJob.status.toUpperCase()}
-            </span>
-          </div>
-          
-          {(activeJob.status === 'queued' || activeJob.status === 'processing') && (
-            <div className="space-y-3">
-              <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-primary rounded-full transition-all duration-300 ease-out" 
-                  style={{ width: `${activeJob.progress ?? fakeProgress}%` }}
-                ></div>
-              </div>
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-muted-foreground animate-pulse font-medium">
-                  Synthesizing voice... 
-                </p>
-                <span className="text-xs font-bold text-foreground">
-                  {activeJob.progress ?? fakeProgress}%
-                </span>
-              </div>
-            </div>
-          )}
-
-          {activeJob.status === 'failed' && (
-            <p className="text-xs text-red-600 font-medium">
-              {activeJob.errorMessage || "An error occurred during generation. Please try again."}
-            </p>
-          )}
-          
-          {activeJob.status === 'completed' && activeJob.audioUrl && (
-            <div className="flex flex-col gap-3 pt-2">
-              <audio controls src={`http://localhost:8000${activeJob.audioUrl}`} className="h-8 w-full" autoPlay />
-              <a 
-                href={`http://localhost:8000${activeJob.audioUrl}`}
-                download={`CapVoice_${activeJob.id}.mp3`}
-                className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground hover:opacity-90 transition-colors"
-              >
-                <Download className="h-4 w-4" />
-                Download MP3
-              </a>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
