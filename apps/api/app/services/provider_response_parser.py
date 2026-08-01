@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 PREFERRED_AUDIO_KEYS = {
     "audio_url", "audioUrl", "download_url", "downloadUrl",
-    "play_url", "playUrl", "url", "uri",
+    "play_url", "playUrl", "url", "uri", "speech_url",
 }
 
 def _maybe_decode_json(value: Any) -> Any:

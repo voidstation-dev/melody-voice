@@ -2,7 +2,7 @@ from pathlib import Path
 import httpx
 
 ALLOWED_CONTENT_TYPES = {
-    "audio/mpeg", "audio/mp3", "audio/x-mpeg", "application/octet-stream",
+    "audio/mpeg", "audio/mp3", "audio/x-mpeg", "application/octet-stream", "video/mp4",
 }
 
 async def download_audio(

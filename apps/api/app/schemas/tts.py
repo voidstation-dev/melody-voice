@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 
 class CreateTTSJobRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=3000)
+    text: str = Field(min_length=1, max_length=500000)
     voiceType: str = Field(min_length=1, max_length=150)
     resourceId: str | None = Field(default=None)
     rate: float = Field(default=1.0, ge=0.5, le=2.0)

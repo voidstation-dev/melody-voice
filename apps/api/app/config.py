@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     preview_storage_dir: Path = Path("../../data/previews")
     raw_response_dir: Path = Path("../../data/raw-responses")
     capcut_catalog_path: Path = Path("../../vendor/capcut-tts-api/Voice.json")
-    tts_max_text_chars: int = 3000
+    tts_max_text_chars: int = 500000
     tts_min_rate: float = 0.5
     tts_max_rate: float = 2.0
     tts_provider_timeout_seconds: float = 90.0

@@ -20,6 +20,9 @@ class CapCutProvider:
             lang_code = item.get("lang", "")
             if language and lang_code.lower() != language.lower():
                 continue
+            voice_type = item.get("voice_type", "")
+            if "Neural" in voice_type:
+                continue
             voices.append(
                 ProviderVoice(
                     language_short=item.get("lan", ""),

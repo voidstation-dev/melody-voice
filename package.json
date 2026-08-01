@@ -7,5 +7,10 @@
     "lint:web": "pnpm --dir apps/web lint",
     "test:web": "pnpm --dir apps/web test",
     "test:api": "pytest apps/api/tests -v"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
