@@ -16,6 +16,28 @@ async def test_health_endpoint():
 
 
 @pytest.mark.asyncio
+async def test_readiness_reports_queue_and_dependency_state():
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/api/v1/health/ready")
+
+    assert response.status_code in {200, 503}
+    payload = response.json()
+    assert payload["status"] in {"ready", "degraded"}
+    assert set(payload["checks"]) == {
+        "database",
+        "queue",
+        "voice_catalog",
+        "audio_directory",
+        "ffmpeg",
+        "circuit_breaker",
+    }
+    assert "queueDepth" in payload
+
+
+@pytest.mark.asyncio
 async def test_migration_failure_prevents_queue_start(monkeypatch):
     migration = AsyncMock(side_effect=RuntimeError("migration failed"))
     queue_start = AsyncMock()

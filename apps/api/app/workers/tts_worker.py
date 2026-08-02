@@ -1,7 +1,8 @@
 import asyncio
-import json
+import logging
 import os
 import random
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,6 +29,10 @@ from app.services.retry_policy import (
 )
 from app.utils.text_utils import split_text_into_chunks
 from app.services.tts_service import claim_job
+from app.services.raw_response_storage import save_failed_provider_response
+
+
+logger = logging.getLogger(__name__)
 
 
 async def process_chunk(
@@ -140,7 +145,7 @@ async def execute_tts_job_step(
     provider: CapCutProvider | None = None,
     worker_id: int = 0,
 ) -> None:
-    del worker_id  # Structured worker context is added in Phase 7.
+    started_monotonic = time.monotonic()
     async with AsyncSessionLocal() as session:
         if not await claim_job(session, job_id):
             return
@@ -153,6 +158,20 @@ async def execute_tts_job_step(
         )
         downloaded_files: list[Path] = []
         final_destination = settings.audio_storage_dir / f"{job.id}.mp3"
+        raw_responses: list[dict | None] = []
+
+        logger.info(
+            "TTS job started",
+            extra={
+                "job_id": job.id,
+                "batch_id": job.batch_id,
+                "worker_id": worker_id,
+                "attempt": job.attempt_count,
+                "voice_type": job.voice_type,
+                "text_length": len(job.text),
+                "status": "processing",
+            },
+        )
 
         try:
             chunks = split_text_into_chunks(job.text) or [""]
@@ -171,7 +190,7 @@ async def execute_tts_job_step(
                     else job.rate
                 ),
             )
-            raw_responses: list[dict | None] = [None] * len(chunks)
+            raw_responses = [None] * len(chunks)
             progress_reporter = ProgressReporter(
                 commit_interval_seconds=(
                     settings.tts_progress_commit_interval_seconds
@@ -206,15 +225,6 @@ async def execute_tts_job_step(
             downloaded_files.sort(
                 key=lambda path: int(path.stem.rsplit("part", 1)[1])
             )
-            if settings.save_raw_provider_responses:
-                settings.raw_response_dir.mkdir(parents=True, exist_ok=True)
-                raw_path = settings.raw_response_dir / f"{job.id}.json"
-                raw_path.write_text(
-                    json.dumps(raw_responses, indent=2),
-                    encoding="utf-8",
-                )
-                job.raw_response_path = str(raw_path)
-
             await combine_audio_parts(
                 parts=downloaded_files,
                 destination=final_destination,
@@ -238,6 +248,22 @@ async def execute_tts_job_step(
             job.audio_file_size = final_size
             job.progress = 100
             job.completed_at = datetime.now(timezone.utc)
+            logger.info(
+                "TTS job completed",
+                extra={
+                    "job_id": job.id,
+                    "batch_id": job.batch_id,
+                    "worker_id": worker_id,
+                    "attempt": job.attempt_count,
+                    "chunk_count": len(chunks),
+                    "voice_type": job.voice_type,
+                    "text_length": len(job.text),
+                    "status": "completed",
+                    "duration_ms": int(
+                        (time.monotonic() - started_monotonic) * 1000
+                    ),
+                },
+            )
 
         except Exception as exc:
             if isinstance(exc, ChunkLimitExceeded):
@@ -277,11 +303,50 @@ async def execute_tts_job_step(
                     job.id,
                     delay_seconds=delay,
                 )
+                logger.warning(
+                    "TTS job scheduled for retry",
+                    extra={
+                        "job_id": job.id,
+                        "batch_id": job.batch_id,
+                        "worker_id": worker_id,
+                        "attempt": job.attempt_count,
+                        "voice_type": job.voice_type,
+                        "text_length": len(job.text),
+                        "status": "queued",
+                        "duration_ms": int(
+                            (time.monotonic() - started_monotonic) * 1000
+                        ),
+                        "error_code": error.code,
+                    },
+                )
                 return
 
             job.status = "failed"
             job.error_code = error.code
             job.error_message = error.message
+            if settings.save_raw_provider_responses and any(raw_responses):
+                raw_path = save_failed_provider_response(
+                    job_id=job.id,
+                    payload=raw_responses,
+                    directory=settings.raw_response_dir,
+                )
+                job.raw_response_path = str(raw_path)
+            logger.error(
+                "TTS job failed",
+                extra={
+                    "job_id": job.id,
+                    "batch_id": job.batch_id,
+                    "worker_id": worker_id,
+                    "attempt": job.attempt_count,
+                    "voice_type": job.voice_type,
+                    "text_length": len(job.text),
+                    "status": "failed",
+                    "duration_ms": int(
+                        (time.monotonic() - started_monotonic) * 1000
+                    ),
+                    "error_code": error.code,
+                },
+            )
 
         finally:
             cleanup_job_artifacts(

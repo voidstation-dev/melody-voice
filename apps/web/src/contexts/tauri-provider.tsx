@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Command } from "@tauri-apps/plugin-shell";
 import { appDataDir, resolveResource } from "@tauri-apps/api/path";
-import { setApiBaseUrl } from "@/lib/api-client";
+import { setApiConnection } from "@/lib/api-client";
 import { Loader2 } from "lucide-react";
 
 export function TauriProvider({ children }: { children: React.ReactNode }) {
@@ -20,14 +20,14 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
 
     let sidecarProcess: any = null;
     let isMounted = true;
-    let pollTimer: any = null;
+    const apiToken = crypto.randomUUID();
 
     async function probeHealth(url: string) {
       try {
-        const res = await fetch(`${url}/api/v1/health`, { method: "GET" });
+        const res = await fetch(`${url}/api/v1/health/live`, { method: "GET" });
         if (res.ok && isMounted) {
           console.log(`Successfully connected to API at ${url}`);
-          setApiBaseUrl(url);
+          setApiConnection(url, apiToken);
           setIsReady(true);
           return true;
         }
@@ -38,14 +38,6 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
     }
 
     async function bootstrap() {
-      // First check existing backend on port 8000
-      if (await probeHealth("http://localhost:8000")) return;
-
-      // Start periodic health probe on 8000
-      pollTimer = setInterval(() => {
-        probeHealth("http://localhost:8000");
-      }, 1000);
-
       try {
         const dataDir = await appDataDir();
         const catalogPath = await resolveResource("bin/Voice.json");
@@ -63,7 +55,10 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
         const sidecar = Command.sidecar("bin/melody-api", [], {
           env: {
             PYTHONUNBUFFERED: "1",
+            APP_ENV: "production",
+            API_HOST: "127.0.0.1",
             API_PORT: apiPort,
+            MELODY_API_TOKEN: apiToken,
             MELODY_DATA_DIR: dataDir,
             MELODY_CATALOG_PATH: catalogPath,
             FFMPEG_BINARY_PATH: ffmpegPath,
@@ -72,7 +67,7 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
 
         const handleOutput = (line: string, source: "STDOUT" | "STDERR") => {
           console.log(`[API ${source}]:`, line);
-          const match = line.match(/(?:http:\/\/|0\.0\.0\.0:|127\.0\.0\.1:)(\d+)/) || line.match(/port\s+(\d+)/i);
+          const match = line.match(/(?:https?:\/\/)?(?:127\.0\.0\.1|localhost|0\.0\.0\.0):(\d+)/) || line.match(/port\s+(\d+)/i);
           if (match && isMounted) {
             const port = match[1];
             if (port && port !== "0") {
@@ -89,8 +84,7 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
         sidecarProcess = await sidecar.spawn();
       } catch (err: any) {
         console.error("Failed to bootstrap Tauri sidecar", err);
-        const fallbackOk = await probeHealth("http://localhost:8000");
-        if (!fallbackOk && isMounted) {
+        if (isMounted) {
           setError(err.toString());
         }
       }
@@ -100,7 +94,6 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       isMounted = false;
-      if (pollTimer) clearInterval(pollTimer);
       if (sidecarProcess) {
         sidecarProcess.kill();
       }

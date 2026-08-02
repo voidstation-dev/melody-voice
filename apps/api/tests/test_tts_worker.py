@@ -349,3 +349,42 @@ async def test_invalid_final_output_is_failed_and_removed(
         assert reloaded.error_code == "AUDIO_INVALID_CONTENT"
     assert not (tmp_path / f"{job_id}.mp3").exists()
     assert list(tmp_path.glob(f"{job_id}_part*.mp3")) == []
+
+
+@pytest.mark.asyncio
+async def test_successful_job_does_not_persist_raw_provider_response(
+    async_session_factory,
+    tmp_path,
+    monkeypatch,
+):
+    async with async_session_factory() as session:
+        job = TTSJobModel(
+            text="hello",
+            text_hash="raw-success",
+            voice_type="voice",
+            voice_display_name="Voice",
+            language_code="vi-VN",
+            status="queued",
+        )
+        session.add(job)
+        await session.commit()
+        job_id = job.id
+
+    async def fake_download(*, url, destination, max_bytes):
+        destination.write_bytes(b"ID3audio")
+        return "audio/mpeg", 8
+
+    async def fake_combine(*, parts, destination, rate):
+        destination.write_bytes(b"ID3combined")
+
+    raw_directory = tmp_path / "raw"
+    monkeypatch.setattr("app.workers.tts_worker.AsyncSessionLocal", async_session_factory)
+    monkeypatch.setattr("app.workers.tts_worker.download_audio", fake_download)
+    monkeypatch.setattr("app.workers.tts_worker.combine_audio_parts", fake_combine)
+    monkeypatch.setattr(settings, "audio_storage_dir", tmp_path)
+    monkeypatch.setattr(settings, "raw_response_dir", raw_directory)
+    monkeypatch.setattr(settings, "save_raw_provider_responses", True)
+
+    await execute_tts_job_step(job_id, provider=SuccessfulProvider())
+
+    assert list(raw_directory.glob("*.json")) == []

@@ -127,6 +127,17 @@ class TTSQueueManager:
         self.delayed_tasks.add(task)
         task.add_done_callback(self.delayed_tasks.discard)
 
+    def health_snapshot(self) -> dict[str, object]:
+        return {
+            "accepting_jobs": self.accepting_jobs,
+            "worker_count": self.concurrency,
+            "workers_alive": sum(
+                1 for worker in self.workers if not worker.done()
+            ),
+            "queue_depth": self.queue.qsize(),
+            "circuit_breaker": self.circuit_breaker.snapshot(),
+        }
+
     async def _worker(self, worker_id: int) -> None:
         provider = self.provider_factory()
         logger.info("TTS queue worker %s started", worker_id)

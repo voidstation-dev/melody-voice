@@ -106,3 +106,19 @@ async def test_shutdown_requeues_interrupted_processing_job(monkeypatch):
 
     requeue.assert_awaited_once_with("job-1")
     assert manager.accepting_jobs is False
+
+
+@pytest.mark.asyncio
+async def test_queue_health_snapshot_reports_workers_and_depth():
+    manager = TTSQueueManager(concurrency=2, provider_factory=object)
+    await manager.start()
+    try:
+        await manager.enqueue("job-1")
+        snapshot = manager.health_snapshot()
+        assert snapshot["accepting_jobs"] is True
+        assert snapshot["worker_count"] == 2
+        assert snapshot["workers_alive"] == 2
+        assert snapshot["queue_depth"] in {0, 1}
+        assert snapshot["circuit_breaker"]["state"] == "closed"
+    finally:
+        await manager.stop()

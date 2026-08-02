@@ -1,4 +1,5 @@
 import uuid
+import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,7 @@ from app.utils.text_utils import split_text_into_chunks, slugify_vietnamese
 from app.services.voice_catalog import voice_catalog
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 def serialize_job(job: TTSJobModel) -> TTSJobResponse:
     text_prev = job.text[:80] + "..." if len(job.text) > 80 else job.text
@@ -196,8 +198,11 @@ async def delete_job_endpoint(job_id: str, session: AsyncSession = Depends(get_a
             m4a_path = job.audio_path.replace(".mp3", ".m4a")
             if os.path.exists(m4a_path):
                 os.remove(m4a_path)
-        except Exception as e:
-            print(f"Error deleting audio files: {e}")
+        except Exception:
+            logger.exception(
+                "Failed deleting audio files",
+                extra={"job_id": job.id},
+            )
 
     await session.delete(job)
     await session.commit()
