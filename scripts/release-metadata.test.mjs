@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const helper = join(repositoryRoot, 'scripts', 'release-metadata.mjs');
+const releaseWorkflow = join(repositoryRoot, '.github', 'workflows', 'release.yml');
 
 function createFixture({
   tauri = '0.2.0',
@@ -168,4 +169,17 @@ test('writes multiline release notes through GITHUB_OUTPUT without delimiter col
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('release workflow installs Rust before metadata validation on two serialized targets', () => {
+  const workflow = readFileSync(releaseWorkflow, 'utf8');
+  assert.ok(
+    workflow.indexOf('- name: Install Rust stable') < workflow.indexOf('- name: Validate release metadata'),
+    'cargo must be installed before the metadata validator invokes cargo metadata',
+  );
+  assert.match(workflow, /^\s+max-parallel:\s+1\s*$/m);
+  assert.deepEqual(
+    [...workflow.matchAll(/^\s+target:\s+([^\s#]+)\s*$/gm)].map((match) => match[1]),
+    ['aarch64-apple-darwin', 'x86_64-pc-windows-msvc'],
+  );
 });

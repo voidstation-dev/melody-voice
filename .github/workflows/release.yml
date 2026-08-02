@@ -36,16 +36,16 @@ jobs:
           corepack enable
           corepack prepare pnpm@10.11.0 --activate
 
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
       - name: Validate release metadata
         id: metadata
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: node scripts/release-metadata.mjs --github-output
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
