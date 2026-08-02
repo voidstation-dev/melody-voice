@@ -9,11 +9,22 @@ import { fileURLToPath } from 'node:url';
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const helper = join(repositoryRoot, 'scripts', 'release-metadata.mjs');
 
-function createFixture({ tauri = '0.2.0', cargo = '0.2.0', web = '0.2.0', changelog } = {}) {
+function createFixture({
+  tauri = '0.2.0',
+  cargo = '0.2.0',
+  cargoDocument,
+  web = '0.2.0',
+  changelog,
+} = {}) {
   const root = mkdtempSync(join(tmpdir(), 'voidmelody-release-metadata-'));
   mkdirSync(join(root, 'apps', 'web', 'src-tauri'), { recursive: true });
+  mkdirSync(join(root, 'apps', 'web', 'src-tauri', 'src'), { recursive: true });
   writeFileSync(join(root, 'apps', 'web', 'src-tauri', 'tauri.conf.json'), JSON.stringify({ version: tauri }));
-  writeFileSync(join(root, 'apps', 'web', 'src-tauri', 'Cargo.toml'), `[package]\nname = "app"\nversion = "${cargo}"\n`);
+  writeFileSync(
+    join(root, 'apps', 'web', 'src-tauri', 'Cargo.toml'),
+    cargoDocument ?? `[package]\nname = "app"\nversion = "${cargo}"\nedition = "2021"\n`,
+  );
+  writeFileSync(join(root, 'apps', 'web', 'src-tauri', 'src', 'lib.rs'), 'pub fn fixture() {}\n');
   writeFileSync(join(root, 'apps', 'web', 'package.json'), JSON.stringify({ name: 'voidmelody-web', version: web }));
   writeFileSync(join(root, 'CHANGELOG.md'), changelog ?? '# Changelog\n\n## [0.2.0] - 2026-08-02\n\n### Added\n\n- Signed updater artifacts.\n\n## [0.1.0] - 2026-07-01\n\n### Added\n\n- Initial release.\n');
   return root;
@@ -63,6 +74,43 @@ test('rejects a tag that is not an exact vX.Y.Z match for the source version', (
     const result = runHelper(root, { tag: 'v0.2.0-beta.1' });
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /must match vX\.Y\.Z/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rejects leading zeroes in every numeric component of a release tag', () => {
+  const root = createFixture();
+  try {
+    for (const tag of ['v00.2.0', 'v0.02.0', 'v0.2.00']) {
+      const result = runHelper(root, { tag });
+      assert.notEqual(result.status, 0, tag);
+      assert.match(result.stderr, /must match vX\.Y\.Z/, tag);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rejects leading zeroes in JSON source metadata', () => {
+  const root = createFixture({ tauri: '00.2.0' });
+  try {
+    const result = runHelper(root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Tauri config .* must contain a stable X\.Y\.Z version/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('reads Cargo package version through Cargo metadata with valid alternative TOML formatting', () => {
+  const root = createFixture({
+    cargoDocument: `# Cargo accepts indentation and literal strings.\n[package]\n  edition = '2021'\n  version = '0.2.0' # release\n  name = 'app'\n`,
+  });
+  try {
+    const result = runHelper(root);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).version, '0.2.0');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

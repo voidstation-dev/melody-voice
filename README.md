@@ -151,8 +151,8 @@ Install the Evergreen WebView2 Runtime and Visual Studio 2022 Build Tools with D
 
 ### macOS says the app cannot be opened
 
-Unsigned local builds can be blocked by Gatekeeper. In Finder, Control-click the app, choose **Open**, and confirm the prompt. For a release distribution, sign and notarize the app before publishing.
+Unsigned local and release builds can be blocked by Gatekeeper. In Finder, Control-click the app, choose **Open**, and confirm the prompt. This phase signs only the Tauri updater artifacts; Apple code signing and notarization are not configured, so Gatekeeper warnings are expected.
 
 ### Windows SmartScreen warns about the installer
 
-Unsigned installers can trigger SmartScreen. Prefer the release artifact from this repository; for a distributed release, sign the Windows installer with a trusted code-signing certificate.
+Unsigned installers can trigger SmartScreen. Prefer the release artifact from this repository and verify its source before continuing. This phase signs only the Tauri updater artifacts; Windows Authenticode is not configured, so SmartScreen warnings are expected.

@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
 import { appendFileSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
-const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
-const TAG_PATTERN = /^v(\d+\.\d+\.\d+)$/;
+const NUMERIC_IDENTIFIER = '(?:0|[1-9]\\d*)';
+const VERSION_PATTERN = new RegExp(`^${NUMERIC_IDENTIFIER}\\.${NUMERIC_IDENTIFIER}\\.${NUMERIC_IDENTIFIER}$`);
+const TAG_PATTERN = new RegExp(`^v(${NUMERIC_IDENTIFIER}\\.${NUMERIC_IDENTIFIER}\\.${NUMERIC_IDENTIFIER})$`);
 
 function fail(message) {
   throw new Error(message);
@@ -24,9 +26,30 @@ function readJsonVersion(path, label) {
 }
 
 function readCargoVersion(path) {
-  const cargo = readFileSync(path, 'utf8');
-  const packageSection = cargo.match(/^\[package\]\s*$([\s\S]*?)(?=^\[|$(?![\s\S]))/m);
-  const version = packageSection?.[1].match(/^version\s*=\s*"([^"\n]+)"\s*(?:#.*)?$/m)?.[1];
+  const manifestPath = resolve(path);
+  const result = spawnSync(process.env.CARGO || 'cargo', [
+    'metadata',
+    '--no-deps',
+    '--format-version',
+    '1',
+    '--manifest-path',
+    manifestPath,
+  ], { encoding: 'utf8' });
+  if (result.error) {
+    fail(`Unable to run Cargo metadata for ${path}: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    const detail = result.stderr.trim().split(/\r?\n/).at(-1);
+    fail(`Unable to read Cargo package at ${path} through Cargo metadata${detail ? `: ${detail}` : ''}`);
+  }
+  let metadata;
+  try {
+    metadata = JSON.parse(result.stdout);
+  } catch (error) {
+    fail(`Cargo metadata returned invalid JSON for ${path}: ${error.message}`);
+  }
+  const packageMetadata = metadata.packages?.find((entry) => resolve(entry.manifest_path) === manifestPath);
+  const version = packageMetadata?.version;
   if (!version || !VERSION_PATTERN.test(version)) {
     fail(`Cargo package at ${path} must contain a stable X.Y.Z version`);
   }
