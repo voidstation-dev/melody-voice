@@ -11,6 +11,8 @@ from app.exceptions import TTSJobError
 from app.models.tts_job import TTSJobModel
 from app.providers.capcut_provider import CapCutProvider
 from app.services.audio_storage import download_audio
+from app.services.audio_storage import validate_audio_file
+from app.services.audio_cleanup import cleanup_job_artifacts
 from app.services.chunk_executor import (
     ChunkLimitExceeded,
     ChunkResult,
@@ -77,8 +79,14 @@ async def combine_audio_parts(
     destination: Path,
     rate: float,
 ) -> None:
+    temporary = Path(f"{destination}.tmp")
     if len(parts) == 1 and rate == 1.0:
-        parts[0].replace(destination)
+        try:
+            parts[0].replace(temporary)
+            validate_audio_file(temporary, mime_type="audio/mpeg")
+            temporary.replace(destination)
+        finally:
+            temporary.unlink(missing_ok=True)
         return
 
     list_file = destination.with_name(f"{destination.stem}_list.txt")
@@ -101,7 +109,7 @@ async def combine_audio_parts(
         command.extend(["-filter:a", f"atempo={rate}", "-q:a", "2"])
     else:
         command.extend(["-c", "copy"])
-    command.append(str(destination.absolute()))
+    command.extend(["-f", "mp3", str(temporary.absolute())])
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -119,8 +127,11 @@ async def combine_audio_parts(
                 ),
                 retryable=False,
             )
+        validate_audio_file(temporary, mime_type="audio/mpeg")
+        temporary.replace(destination)
     finally:
         list_file.unlink(missing_ok=True)
+        temporary.unlink(missing_ok=True)
 
 
 async def execute_tts_job_step(
@@ -141,6 +152,7 @@ async def execute_tts_job_step(
             catalog_path=settings.capcut_catalog_path
         )
         downloaded_files: list[Path] = []
+        final_destination = settings.audio_storage_dir / f"{job.id}.mp3"
 
         try:
             chunks = split_text_into_chunks(job.text) or [""]
@@ -203,7 +215,6 @@ async def execute_tts_job_step(
                 )
                 job.raw_response_path = str(raw_path)
 
-            final_destination = settings.audio_storage_dir / f"{job.id}.mp3"
             await combine_audio_parts(
                 parts=downloaded_files,
                 destination=final_destination,
@@ -216,10 +227,15 @@ async def execute_tts_job_step(
             for part in downloaded_files:
                 part.unlink(missing_ok=True)
 
+            final_size = validate_audio_file(
+                final_destination,
+                mime_type="audio/mpeg",
+            )
+
             job.status = "completed"
             job.audio_path = str(final_destination)
             job.audio_mime_type = "audio/mpeg"
-            job.audio_file_size = final_destination.stat().st_size
+            job.audio_file_size = final_size
             job.progress = 100
             job.completed_at = datetime.now(timezone.utc)
 
@@ -266,5 +282,13 @@ async def execute_tts_job_step(
             job.status = "failed"
             job.error_code = error.code
             job.error_message = error.message
+
+        finally:
+            cleanup_job_artifacts(
+                job.id,
+                audio_dir=settings.audio_storage_dir,
+            )
+            if job.status != "completed":
+                final_destination.unlink(missing_ok=True)
 
         await session.commit()

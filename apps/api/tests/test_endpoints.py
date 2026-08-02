@@ -1,5 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock
+from app.api.v1.tts_jobs import retry_job_endpoint
+from app.models.tts_job import TTSJobModel
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 
@@ -25,3 +27,46 @@ async def test_migration_failure_prevents_queue_start(monkeypatch):
             pass
 
     queue_start.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_manual_retry_creates_new_job_and_preserves_original(
+    async_session,
+    monkeypatch,
+):
+    original = TTSJobModel(
+        text="original text",
+        text_hash="original-hash",
+        voice_type="voice",
+        voice_display_name="Voice",
+        resource_id="resource",
+        language_code="vi-VN",
+        rate=1.25,
+        status="completed",
+        progress=100,
+        audio_path="/tmp/original.mp3",
+        audio_file_size=123,
+        batch_id="batch-1",
+        batch_position=2,
+    )
+    async_session.add(original)
+    await async_session.commit()
+    original_id = original.id
+    enqueue = AsyncMock(return_value=True)
+    monkeypatch.setattr("app.api.v1.tts_jobs.queue_manager.enqueue", enqueue)
+
+    response = await retry_job_endpoint(original_id, session=async_session)
+
+    await async_session.refresh(original)
+    retried = await async_session.get(TTSJobModel, response.id)
+    assert response.id != original_id
+    assert original.status == "completed"
+    assert original.audio_path == "/tmp/original.mp3"
+    assert original.audio_file_size == 123
+    assert retried is not None
+    assert retried.status == "queued"
+    assert retried.attempt_count == 0
+    assert retried.text == original.text
+    assert retried.voice_type == original.voice_type
+    assert retried.batch_id == original.batch_id
+    enqueue.assert_awaited_once_with(retried.id)

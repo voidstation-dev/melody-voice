@@ -3,6 +3,10 @@ import pytest
 import respx
 from httpx import Response
 from app.services.audio_storage import download_audio
+from app.services.audio_storage import close_http_client, validate_audio_file
+from app.exceptions import TTSJobError
+import app.services.audio_storage as audio_storage
+import httpx
 
 @pytest.mark.asyncio
 @respx.mock
@@ -35,3 +39,45 @@ async def test_download_rejects_non_audio_payload(tmp_path: Path):
         await download_audio(url=target_url, destination=destination)
 
     assert not destination.exists()
+
+
+class BrokenAudioStream(httpx.AsyncByteStream):
+    async def __aiter__(self):
+        yield b"ID3partial"
+        raise httpx.ReadError("connection reset")
+
+
+@pytest.mark.asyncio
+async def test_download_removes_temp_file_when_stream_breaks(tmp_path: Path):
+    async def handler(request):
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "audio/mpeg"},
+            stream=BrokenAudioStream(),
+        )
+
+    audio_storage._http_client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    )
+    destination = tmp_path / "broken.mp3"
+    try:
+        with pytest.raises(httpx.ReadError):
+            await download_audio(
+                url="https://cdn.example.com/broken.mp3",
+                destination=destination,
+            )
+        assert not destination.with_suffix(".tmp").exists()
+        assert not destination.exists()
+    finally:
+        await close_http_client()
+
+
+def test_final_audio_validation_rejects_invalid_signature(tmp_path: Path):
+    output = tmp_path / "job.mp3"
+    output.write_bytes(b"not audio")
+
+    with pytest.raises(TTSJobError) as exc_info:
+        validate_audio_file(output, mime_type="audio/mpeg")
+
+    assert exc_info.value.code == "AUDIO_INVALID_CONTENT"
+    assert exc_info.value.retryable is False

@@ -5,18 +5,29 @@ from app.api.v1.router import api_router
 from app.config import settings
 from app.services.database_migrations import run_database_migrations
 from app.services.job_recovery import recover_jobs
+from app.services.audio_cleanup import cleanup_stale_temp_files
+from app.services.audio_storage import close_http_client
+import asyncio
 
 from app.workers.queue_manager import queue_manager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await run_database_migrations()
+    await asyncio.to_thread(
+        cleanup_stale_temp_files,
+        audio_dir=settings.audio_storage_dir,
+        older_than_seconds=3_600,
+    )
     recovered_ids = await recover_jobs()
     await queue_manager.start()
     for job_id in recovered_ids:
         await queue_manager.enqueue(job_id)
-    yield
-    await queue_manager.stop()
+    try:
+        yield
+    finally:
+        await queue_manager.stop()
+        await close_http_client()
 
 app = FastAPI(title="CapVoice Studio API", version="0.1.0", lifespan=lifespan)
 

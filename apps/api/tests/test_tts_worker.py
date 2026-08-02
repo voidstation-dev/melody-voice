@@ -1,6 +1,7 @@
 import asyncio
 import threading
 import time
+from pathlib import Path
 
 import pytest
 import requests
@@ -12,7 +13,34 @@ from app.database import Base
 from app.exceptions import TTSJobError
 from app.models.tts_job import TTSJobModel
 from app.providers.base import ProviderResult
-from app.workers.tts_worker import execute_tts_job_step
+from app.workers.tts_worker import combine_audio_parts, execute_tts_job_step
+
+
+class ConcatProcess:
+    returncode = 0
+
+    async def communicate(self):
+        return b"", b""
+
+
+@pytest.mark.asyncio
+async def test_concat_writes_validated_output_atomically(tmp_path, monkeypatch):
+    parts = [tmp_path / "part0.mp3", tmp_path / "part1.mp3"]
+    for part in parts:
+        part.write_bytes(b"ID3audio")
+    destination = tmp_path / "job.mp3"
+
+    async def fake_subprocess(*command, **kwargs):
+        assert command[-2:] == ("mp3", str(Path(f"{destination}.tmp").absolute()))
+        Path(command[-1]).write_bytes(b"ID3combined")
+        return ConcatProcess()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_subprocess)
+
+    await combine_audio_parts(parts=parts, destination=destination, rate=1.0)
+
+    assert destination.read_bytes() == b"ID3combined"
+    assert not Path(f"{destination}.tmp").exists()
 
 
 class CommitGuardSession(AsyncSession):
@@ -279,3 +307,45 @@ async def test_ffmpeg_failure_does_not_retry_provider(
         assert reloaded.error_code == "FFMPEG_FAILED"
     assert provider.rates == [1.0]
     delayed_enqueue.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_invalid_final_output_is_failed_and_removed(
+    async_session_factory,
+    tmp_path,
+    monkeypatch,
+):
+    async with async_session_factory() as session:
+        job = TTSJobModel(
+            text="hello",
+            text_hash="invalid-final",
+            voice_type="voice",
+            voice_display_name="Voice",
+            language_code="vi-VN",
+            status="queued",
+        )
+        session.add(job)
+        await session.commit()
+        job_id = job.id
+
+    async def fake_download(*, url, destination, max_bytes):
+        destination.write_bytes(b"ID3audio")
+        return "audio/mpeg", 8
+
+    async def invalid_combine(*, parts, destination, rate):
+        destination.write_bytes(b"not audio")
+
+    monkeypatch.setattr("app.workers.tts_worker.AsyncSessionLocal", async_session_factory)
+    monkeypatch.setattr("app.workers.tts_worker.download_audio", fake_download)
+    monkeypatch.setattr("app.workers.tts_worker.combine_audio_parts", invalid_combine)
+    monkeypatch.setattr(settings, "audio_storage_dir", tmp_path)
+
+    await execute_tts_job_step(job_id, provider=SuccessfulProvider())
+
+    async with async_session_factory() as session:
+        reloaded = await session.get(TTSJobModel, job_id)
+        assert reloaded is not None
+        assert reloaded.status == "failed"
+        assert reloaded.error_code == "AUDIO_INVALID_CONTENT"
+    assert not (tmp_path / f"{job_id}.mp3").exists()
+    assert list(tmp_path.glob(f"{job_id}_part*.mp3")) == []
