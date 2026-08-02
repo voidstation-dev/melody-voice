@@ -87,7 +87,7 @@ export function UpdateModal() {
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape" && canDismiss) {
       event.preventDefault();
-      dismissUpdate();
+      void dismissUpdate();
       return;
     }
     if (event.key !== "Tab") return;
@@ -179,7 +179,7 @@ export function UpdateModal() {
             <>
               <button
                 type="button"
-                onClick={dismissUpdate}
+                onClick={() => void dismissUpdate()}
                 className="min-h-10 touch-manipulation rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold transition-colors motion-reduce:transition-none hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               >
                 Later
@@ -198,7 +198,7 @@ export function UpdateModal() {
             <>
               <button
                 type="button"
-                onClick={dismissUpdate}
+                onClick={() => void dismissUpdate()}
                 className="min-h-10 touch-manipulation rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold transition-colors motion-reduce:transition-none hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               >
                 Not now

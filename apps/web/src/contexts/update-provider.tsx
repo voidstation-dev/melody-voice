@@ -52,11 +52,31 @@ type UpdateContextValue = {
   errorMessage?: string;
   checkForUpdates: (options: { interactive: boolean }) => Promise<void>;
   installAvailableUpdate: () => Promise<void>;
-  dismissUpdate: () => void;
+  dismissUpdate: () => Promise<void>;
 };
 
 const UpdateContext = createContext<UpdateContextValue | null>(null);
-let startupCheckStarted = false;
+
+type StartupCheckOutcome =
+  | { status: "idle" | "up-to-date" }
+  | { status: "error"; errorMessage: string }
+  | { status: "available"; metadata: AvailableUpdate; update: UpdateResource };
+
+type StartupCheckSubscriber = (outcome: StartupCheckOutcome) => void;
+
+const startupCheckCoordinator: {
+  hasStarted: boolean;
+  interactive: boolean;
+  outcome: StartupCheckOutcome | null;
+  promise: Promise<void> | null;
+  subscriber: StartupCheckSubscriber | null;
+} = {
+  hasStarted: false,
+  interactive: false,
+  outcome: null,
+  promise: null,
+  subscriber: null,
+};
 
 function readUpdateMetadata(update: UpdateResource): AvailableUpdate | null {
   const { currentVersion, version, date, body } = update;
@@ -87,6 +107,77 @@ async function closeUpdate(update: UpdateResource | null) {
   }
 }
 
+function deliverStartupOutcome() {
+  const { outcome, subscriber } = startupCheckCoordinator;
+  if (!outcome) return;
+
+  if (!subscriber) {
+    if (outcome.status === "available") {
+      startupCheckCoordinator.outcome = { status: "idle" };
+      void closeUpdate(outcome.update);
+    }
+    return;
+  }
+
+  startupCheckCoordinator.outcome = null;
+  startupCheckCoordinator.subscriber = null;
+  subscriber(outcome);
+}
+
+function subscribeToStartupCheck(subscriber: StartupCheckSubscriber) {
+  startupCheckCoordinator.subscriber = subscriber;
+  deliverStartupOutcome();
+
+  return () => {
+    if (startupCheckCoordinator.subscriber === subscriber) {
+      startupCheckCoordinator.subscriber = null;
+    }
+  };
+}
+
+function startStartupCheck() {
+  if (startupCheckCoordinator.promise) return startupCheckCoordinator.promise;
+  if (startupCheckCoordinator.hasStarted) return Promise.resolve();
+  if (startupCheckCoordinator.outcome) {
+    deliverStartupOutcome();
+    return Promise.resolve();
+  }
+
+  const startupCheck = (async () => {
+    let outcome: StartupCheckOutcome;
+    try {
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const update = (await check()) as UpdateResource | null;
+      if (!update) {
+        outcome = { status: "up-to-date" };
+      } else {
+        const metadata = readUpdateMetadata(update);
+        if (!metadata) {
+          await closeUpdate(update);
+          outcome = startupCheckCoordinator.interactive
+            ? { status: "error", errorMessage: "Update information could not be read. Try again." }
+            : { status: "idle" };
+        } else {
+          outcome = { status: "available", metadata, update };
+        }
+      }
+    } catch {
+      outcome = startupCheckCoordinator.interactive
+        ? { status: "error", errorMessage: "Could not check for updates. Try again." }
+        : { status: "idle" };
+    }
+
+    startupCheckCoordinator.outcome = outcome;
+    deliverStartupOutcome();
+  })();
+
+  startupCheckCoordinator.hasStarted = true;
+  startupCheckCoordinator.promise = startupCheck.finally(() => {
+    startupCheckCoordinator.promise = null;
+  });
+  return startupCheckCoordinator.promise;
+}
+
 export function useUpdate() {
   const context = useContext(UpdateContext);
   if (!context) {
@@ -105,14 +196,21 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const updateResourceRef = useRef<UpdateResource | null>(null);
   const checkPromiseRef = useRef<Promise<void> | null>(null);
+  const dismissPromiseRef = useRef<Promise<void> | null>(null);
   const installPromiseRef = useRef<Promise<void> | null>(null);
   const dismissedRef = useRef(false);
+  const mountedRef = useRef(false);
 
   const checkForUpdates = useCallback(
     async ({ interactive }: { interactive: boolean }) => {
       if (!isDesktop) return;
+      if (dismissPromiseRef.current) await dismissPromiseRef.current;
       if (checkPromiseRef.current) return checkPromiseRef.current;
       if (installPromiseRef.current) return installPromiseRef.current;
+      if (startupCheckCoordinator.promise) {
+        if (interactive) startupCheckCoordinator.interactive = true;
+        return startupCheckCoordinator.promise;
+      }
 
       if (interactive) dismissedRef.current = false;
       const checkPromise = (async () => {
@@ -126,6 +224,10 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
         try {
           const { check } = await import("@tauri-apps/plugin-updater");
           const update = (await check()) as UpdateResource | null;
+          if (!mountedRef.current) {
+            await closeUpdate(update);
+            return;
+          }
           if (!update) {
             setStatus("up-to-date");
             return;
@@ -153,6 +255,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
           setAvailableUpdate(metadata);
           setStatus("available");
         } catch {
+          if (!mountedRef.current) return;
           if (interactive) {
             setErrorMessage("Could not check for updates. Try again.");
             setStatus("error");
@@ -170,18 +273,24 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
     [isDesktop],
   );
 
-  const dismissUpdate = useCallback(() => {
+  const dismissUpdate = useCallback(async () => {
+    if (dismissPromiseRef.current) return dismissPromiseRef.current;
     dismissedRef.current = true;
     const update = updateResourceRef.current;
     updateResourceRef.current = null;
     setAvailableUpdate(null);
     setErrorMessage(undefined);
     setStatus("idle");
-    void closeUpdate(update);
+    const dismissal = closeUpdate(update);
+    dismissPromiseRef.current = dismissal.finally(() => {
+      dismissPromiseRef.current = null;
+    });
+    return dismissPromiseRef.current;
   }, []);
 
   const installAvailableUpdate = useCallback(async () => {
     if (!isDesktop) return;
+    if (dismissPromiseRef.current) await dismissPromiseRef.current;
     if (installPromiseRef.current) return installPromiseRef.current;
     if (checkPromiseRef.current) return checkPromiseRef.current;
 
@@ -198,6 +307,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
 
       try {
         await update.download((event) => {
+          if (!mountedRef.current) return;
           if (event.event === "Started") {
             const contentLength = event.data.contentLength;
             setTotalBytes(
@@ -213,6 +323,8 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
           }
         });
 
+        if (!mountedRef.current) return;
+
         phase = "install";
         setStatus("installing");
         await shutdownSidecar();
@@ -224,6 +336,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
         const { relaunch } = await import("@tauri-apps/plugin-process");
         await relaunch();
       } catch {
+        if (!mountedRef.current) return;
         if (updateResourceRef.current === update) {
           updateResourceRef.current = null;
           await closeUpdate(update);
@@ -251,6 +364,16 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
   }, [isDesktop, restartSidecar, shutdownSidecar]);
 
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      const update = updateResourceRef.current;
+      updateResourceRef.current = null;
+      void closeUpdate(update);
+    };
+  }, []);
+
+  useEffect(() => {
     let active = true;
     void getRuntimeVersion().then((version) => {
       if (active) setCurrentVersion(version);
@@ -261,19 +384,30 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!isDesktop || !isReady || startupCheckStarted) return;
-    startupCheckStarted = true;
-    void checkForUpdates({ interactive: false });
-  }, [checkForUpdates, isDesktop, isReady]);
+    if (!isDesktop || !isReady) return;
 
-  useEffect(
-    () => () => {
-      const update = updateResourceRef.current;
-      updateResourceRef.current = null;
-      void closeUpdate(update);
-    },
-    [],
-  );
+    let active = true;
+    const unsubscribe = subscribeToStartupCheck((outcome) => {
+      if (!active) {
+        if (outcome.status === "available") void closeUpdate(outcome.update);
+        return;
+      }
+
+      if (outcome.status === "available") {
+        updateResourceRef.current = outcome.update;
+        setAvailableUpdate(outcome.metadata);
+      } else if (outcome.status === "error") {
+        setErrorMessage(outcome.errorMessage);
+      }
+      setStatus(outcome.status);
+    });
+    void startStartupCheck();
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [isDesktop, isReady]);
 
   const contextValue = useMemo(
     () => ({

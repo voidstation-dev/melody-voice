@@ -294,6 +294,138 @@ describe("UpdateProvider checks", () => {
     await screen.findByTestId("update-mounted");
     await waitFor(() => expect(bridge.check).toHaveBeenCalledOnce());
   });
+
+  it("delivers a deferred startup update to the active StrictMode remount without checking twice", async () => {
+    const pending = deferred<ReturnType<typeof makeUpdate> | null>();
+    const update = makeUpdate();
+    bridge.check.mockReturnValue(pending.promise);
+    const [{ TauriProvider }, { UpdateProvider, useUpdate }] = await Promise.all([
+      import("./tauri-provider"),
+      import("./update-provider"),
+    ]);
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+    const sidecar = makeSidecar();
+    bridge.sidecar.mockReturnValue(sidecar.command);
+
+    function Status() {
+      const { status, availableUpdate } = useUpdate();
+      return <output data-testid="replacement-update">{`${status}:${availableUpdate?.version ?? "none"}`}</output>;
+    }
+
+    function LifecycleToggle() {
+      const [visible, setVisible] = React.useState(true);
+      return (
+        <div>
+          <button onClick={() => setVisible((value) => !value)}>Toggle updates</button>
+          {visible && (
+            <UpdateProvider>
+              <Status />
+            </UpdateProvider>
+          )}
+        </div>
+      );
+    }
+
+    render(
+      <React.StrictMode>
+        <TauriProvider>
+          <LifecycleToggle />
+        </TauriProvider>
+      </React.StrictMode>,
+    );
+    await waitFor(() => expect(sidecar.command.spawn).toHaveBeenCalledOnce());
+    act(() => sidecar.stdoutHandlers[0]("Listening on 127.0.0.1:43004"));
+    await waitFor(() => expect(bridge.check).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle updates" }));
+    await waitFor(() => expect(screen.queryByTestId("replacement-update")).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Toggle updates" }));
+    await screen.findByTestId("replacement-update");
+
+    act(() => pending.resolve(update));
+
+    expect(await screen.findByTestId("replacement-update")).toHaveTextContent("available:0.3.0");
+    expect(bridge.check).toHaveBeenCalledOnce();
+    expect(update.close).not.toHaveBeenCalled();
+  });
+
+  it("closes an update that resolves after its provider permanently unmounts", async () => {
+    const pending = deferred<ReturnType<typeof makeUpdate> | null>();
+    const update = makeUpdate();
+    bridge.check.mockReturnValue(pending.promise);
+    const [{ TauriProvider }, { UpdateProvider, useUpdate }] = await Promise.all([
+      import("./tauri-provider"),
+      import("./update-provider"),
+    ]);
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+    const sidecar = makeSidecar();
+    bridge.sidecar.mockReturnValue(sidecar.command);
+
+    function Status() {
+      return <output>{useUpdate().status}</output>;
+    }
+
+    const view = render(
+      <TauriProvider>
+        <UpdateProvider>
+          <Status />
+        </UpdateProvider>
+      </TauriProvider>,
+    );
+    await waitFor(() => expect(sidecar.command.spawn).toHaveBeenCalledOnce());
+    act(() => sidecar.stdoutHandlers[0]("Listening on 127.0.0.1:43005"));
+    await waitFor(() => expect(bridge.check).toHaveBeenCalledOnce());
+
+    view.unmount();
+    act(() => pending.resolve(update));
+
+    await waitFor(() => expect(update.close).toHaveBeenCalledOnce());
+  });
+
+  it("resolves dismissUpdate only after its update resource closes", async () => {
+    const closePending = deferred<void>();
+    const update = makeUpdate({ close: vi.fn(() => closePending.promise) });
+    bridge.check.mockResolvedValue(update);
+    const [{ TauriProvider }, { UpdateProvider, useUpdate }] = await Promise.all([
+      import("./tauri-provider"),
+      import("./update-provider"),
+    ]);
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+    const sidecar = makeSidecar();
+    bridge.sidecar.mockReturnValue(sidecar.command);
+    let dismissUpdate: (() => unknown) | undefined;
+
+    function DismissProbe() {
+      const updateContext = useUpdate();
+      dismissUpdate = updateContext.dismissUpdate;
+      return <output data-testid="dismiss-status">{updateContext.status}</output>;
+    }
+
+    render(
+      <TauriProvider>
+        <UpdateProvider>
+          <DismissProbe />
+        </UpdateProvider>
+      </TauriProvider>,
+    );
+    await waitFor(() => expect(sidecar.command.spawn).toHaveBeenCalledOnce());
+    act(() => sidecar.stdoutHandlers[0]("Listening on 127.0.0.1:43006"));
+    await screen.findByText("available");
+
+    const completion = dismissUpdate?.();
+    expect(completion).toBeInstanceOf(Promise);
+    let resolved = false;
+    const completed = Promise.resolve(completion).then(() => {
+      resolved = true;
+    });
+    await Promise.resolve();
+    expect(update.close).toHaveBeenCalledOnce();
+    expect(resolved).toBe(false);
+
+    closePending.resolve(undefined);
+    await completed;
+    expect(resolved).toBe(true);
+  });
 });
 
 describe("UpdateProvider installation", () => {
