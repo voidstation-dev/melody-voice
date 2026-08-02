@@ -19,14 +19,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install pnpm
-        run: npm install -g pnpm
+      - name: Enable pinned pnpm
+        run: corepack enable
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -45,11 +47,8 @@ jobs:
       - name: Install uv
         run: pip install uv
 
-      - name: Install frontend dependencies
-        run: pnpm install
-
-      - name: Build Python backend binary (API)
-        run: pnpm build:deps
+      - name: Set up desktop dependencies
+        run: pnpm setup:desktop
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
