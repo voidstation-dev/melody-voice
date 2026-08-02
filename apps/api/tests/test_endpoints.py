@@ -1,6 +1,8 @@
 import pytest
+from fastapi import HTTPException
 from unittest.mock import AsyncMock
 from app.api.v1.tts_jobs import retry_job_endpoint
+from app.config import settings
 from app.models.tts_job import TTSJobModel
 from httpx import AsyncClient, ASGITransport
 from app.main import app
@@ -92,3 +94,31 @@ async def test_manual_retry_creates_new_job_and_preserves_original(
     assert retried.voice_type == original.voice_type
     assert retried.batch_id == original.batch_id
     enqueue.assert_awaited_once_with(retried.id)
+
+
+@pytest.mark.asyncio
+async def test_manual_retry_cannot_bypass_batch_file_limit(
+    async_session,
+    monkeypatch,
+):
+    original = TTSJobModel(
+        text="original text",
+        text_hash="full-batch",
+        voice_type="voice",
+        voice_display_name="Voice",
+        language_code="vi-VN",
+        status="failed",
+        batch_id="full-batch",
+        batch_position=0,
+    )
+    async_session.add(original)
+    await async_session.commit()
+    enqueue = AsyncMock(return_value=True)
+    monkeypatch.setattr("app.api.v1.tts_jobs.queue_manager.enqueue", enqueue)
+    monkeypatch.setattr(settings, "tts_max_batch_files", 1)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await retry_job_endpoint(original.id, session=async_session)
+
+    assert exc_info.value.detail == "BATCH_FILE_LIMIT_EXCEEDED"
+    enqueue.assert_not_awaited()

@@ -218,20 +218,28 @@ async def retry_job_endpoint(job_id: str, session: AsyncSession = Depends(get_as
     if job.status not in ["failed", "completed"]:
         raise HTTPException(status_code=400, detail="Only failed or completed jobs can be retried")
         
-    retried_job = await create_tts_job(
-        session,
-        text=job.text,
-        voice_type=job.voice_type,
-        voice_display_name=job.voice_display_name,
-        language_code=job.language_code,
-        resource_id=job.resource_id,
-        rate=job.rate,
-        kind=job.kind,
-        batch_id=job.batch_id,
-        batch_position=job.batch_position,
-        source_file_name=job.source_file_name,
-        source_file_size=job.source_file_size,
-    )
+    retry_kwargs = {
+        "text": job.text,
+        "voice_type": job.voice_type,
+        "voice_display_name": job.voice_display_name,
+        "language_code": job.language_code,
+        "resource_id": job.resource_id,
+        "rate": job.rate,
+        "kind": job.kind,
+        "batch_id": job.batch_id,
+        "batch_position": job.batch_position,
+        "source_file_name": job.source_file_name,
+        "source_file_size": job.source_file_size,
+    }
+    if job.batch_id:
+        retried_job = await create_tts_job_with_batch_limits(
+            session,
+            **retry_kwargs,
+            max_files=settings.tts_max_batch_files,
+            max_total_chars=settings.tts_max_batch_total_chars,
+        )
+    else:
+        retried_job = await create_tts_job(session, **retry_kwargs)
     await queue_manager.enqueue(retried_job.id)
     
     return serialize_job(retried_job)
