@@ -134,7 +134,7 @@ git submodule status --recursive
 
 If the URL changed, run `git submodule sync --recursive` before `pnpm setup:vendor`.
 
-The setup command applies `patches/capcut-tts-api-succeed-status.patch` so CapCut task responses accept both `success` and `succeed`. This intentionally leaves the submodule worktree modified after setup; the reproducible patch itself is committed in the parent repository.
+The setup command applies `patches/capcut-tts-api-succeed-status.patch` so CapCut task responses accept both `success` and `succeed`. This intentionally leaves the submodule worktree modified after setup; the reproducible patch itself is committed in the parent repository. `pnpm setup:api` reinstalls only this local Python package so existing virtual environments also receive the patch.
 
 ### FFmpeg cannot be found
 
