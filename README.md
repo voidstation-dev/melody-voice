@@ -44,7 +44,7 @@ pnpm setup:desktop
 pnpm dev:desktop
 ```
 
-`pnpm setup:desktop` installs the pinned JavaScript dependencies, initializes the TTS submodule recursively, synchronizes the API virtual environment with `uv`, builds the API sidecar, and copies FFmpeg and the voice catalog into the desktop bundle inputs.
+`pnpm setup:desktop` installs the pinned JavaScript dependencies, initializes the TTS submodule recursively, applies the tracked VoidMelody compatibility patch, synchronizes the API virtual environment with `uv`, builds the API sidecar, and copies FFmpeg and the voice catalog into the desktop bundle inputs.
 
 For an existing clone that was not created recursively, run:
 
@@ -133,6 +133,8 @@ git submodule status --recursive
 ```
 
 If the URL changed, run `git submodule sync --recursive` before `pnpm setup:vendor`.
+
+The setup command applies `patches/capcut-tts-api-succeed-status.patch` so CapCut task responses accept both `success` and `succeed`. This intentionally leaves the submodule worktree modified after setup; the reproducible patch itself is committed in the parent repository.
 
 ### FFmpeg cannot be found
 

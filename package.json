@@ -4,7 +4,7 @@
   "packageManager": "pnpm@10.11.0",
   "scripts": {
     "dev:web": "cd apps/web && pnpm dev",
-    "setup:vendor": "git submodule update --init --recursive",
+    "setup:vendor": "node scripts/setup-vendor.mjs",
     "setup:api": "pnpm setup:vendor && cd apps/api && uv sync",
     "setup:desktop": "pnpm install --frozen-lockfile && pnpm setup:api && pnpm build:deps",
     "dev:api": "cd apps/api && uv run uvicorn app.main:app --reload --port 8000",
