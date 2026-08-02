@@ -37,6 +37,31 @@ LEGACY_CORE_COLUMNS = {
     "updated_at",
     "completed_at",
 }
+LEGACY_CORE_SCHEMA = {
+    "id": ("VARCHAR(36)", None, 1),
+    "kind": ("VARCHAR(20)", True, 0),
+    "text": ("TEXT", True, 0),
+    "text_hash": ("VARCHAR(64)", True, 0),
+    "voice_type": ("VARCHAR(100)", True, 0),
+    "voice_display_name": ("VARCHAR(150)", True, 0),
+    "resource_id": ("VARCHAR(100)", False, 0),
+    "language_code": ("VARCHAR(20)", True, 0),
+    "rate": ("FLOAT", True, 0),
+    "status": ("VARCHAR(20)", True, 0),
+    "progress": ("INTEGER", False, 0),
+    "provider_task_id": ("VARCHAR(100)", False, 0),
+    "provider_token": ("VARCHAR(255)", False, 0),
+    "audio_path": ("VARCHAR(255)", False, 0),
+    "audio_mime_type": ("VARCHAR(50)", False, 0),
+    "audio_file_size": ("INTEGER", False, 0),
+    "raw_response_path": ("VARCHAR(255)", False, 0),
+    "error_code": ("VARCHAR(50)", False, 0),
+    "error_message": ("TEXT", False, 0),
+    "attempt_count": ("INTEGER", True, 0),
+    "created_at": ("DATETIME", True, 0),
+    "updated_at": ("DATETIME", True, 0),
+    "completed_at": ("DATETIME", False, 0),
+}
 LEGACY_ADDITIONS = {
     "batch_id": "VARCHAR(36)",
     "batch_position": "INTEGER",
@@ -112,15 +137,37 @@ def _adopt_legacy_schema(
     database_path: Path,
 ) -> None:
     with sqlite3.connect(database_path) as connection:
-        columns = {
-            row[1]
-            for row in connection.execute("PRAGMA table_info(tts_jobs)")
-        }
+        column_rows = list(connection.execute("PRAGMA table_info(tts_jobs)"))
+        columns = {row[1] for row in column_rows}
         missing_core = LEGACY_CORE_COLUMNS - columns
         if missing_core:
             missing = ", ".join(sorted(missing_core))
             raise MigrationError(
                 f"Legacy tts_jobs schema is missing required columns: {missing}"
+            )
+        definitions = {
+            row[1]: (row[2].upper(), bool(row[3]), row[5])
+            for row in column_rows
+        }
+        incompatible = []
+        for name, (expected_type, expected_notnull, expected_pk) in (
+            LEGACY_CORE_SCHEMA.items()
+        ):
+            actual_type, actual_notnull, actual_pk = definitions[name]
+            if (
+                actual_type != expected_type
+                or (
+                    expected_notnull is not None
+                    and actual_notnull != expected_notnull
+                )
+                or actual_pk != expected_pk
+            ):
+                incompatible.append(name)
+        if incompatible:
+            names = ", ".join(sorted(incompatible))
+            raise MigrationError(
+                "Legacy tts_jobs schema has incompatible core column "
+                f"definitions: {names}"
             )
 
     _backup_database(database_path)

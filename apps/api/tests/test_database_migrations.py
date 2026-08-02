@@ -87,12 +87,16 @@ async def test_runtime_migration_preserves_application_logging(tmp_path):
         root_logger.handlers = original_handlers
 
 
-def create_legacy_database(database_path: Path) -> None:
+def create_legacy_database(
+    database_path: Path,
+    *,
+    id_definition: str = "id VARCHAR(36) PRIMARY KEY",
+) -> None:
     with sqlite3.connect(database_path) as connection:
         connection.executescript(
-            """
+            f"""
             CREATE TABLE tts_jobs (
-                id VARCHAR(36) PRIMARY KEY,
+                {id_definition},
                 kind VARCHAR(20) NOT NULL,
                 text TEXT NOT NULL,
                 text_hash VARCHAR(64) NOT NULL,
@@ -180,3 +184,20 @@ async def test_migrations_reject_unrecognized_legacy_schema(tmp_path):
             database_url=sqlite_url(database_path),
             alembic_ini_path=ALEMBIC_INI,
         )
+
+
+@pytest.mark.asyncio
+async def test_migrations_reject_legacy_schema_with_wrong_core_type(tmp_path):
+    database_path = tmp_path / "wrong-type.db"
+    create_legacy_database(
+        database_path,
+        id_definition="id INTEGER PRIMARY KEY",
+    )
+
+    with pytest.raises(MigrationError, match="incompatible core column"):
+        await run_database_migrations(
+            database_url=sqlite_url(database_path),
+            alembic_ini_path=ALEMBIC_INI,
+        )
+
+    assert not list(tmp_path.glob("wrong-type.db.pre-migration-*.bak"))

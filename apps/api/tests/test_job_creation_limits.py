@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
@@ -5,7 +7,10 @@ from httpx import ASGITransport, AsyncClient
 from app.config import settings
 from app.main import app
 from app.models.tts_job import TTSJobModel
-from app.services.tts_service import assert_batch_capacity
+from app.services.tts_service import (
+    assert_batch_capacity,
+    create_tts_job_with_batch_limits,
+)
 
 
 @pytest.mark.asyncio
@@ -94,3 +99,33 @@ async def test_batch_capacity_rejects_total_text_limit(async_session):
 
     assert exc_info.value.status_code == 422
     assert exc_info.value.detail == "BATCH_TEXT_LIMIT_EXCEEDED"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_batch_admission_never_exceeds_limit(
+    async_session_factory,
+):
+    async def create(position: int):
+        async with async_session_factory() as session:
+            return await create_tts_job_with_batch_limits(
+                session,
+                text=f"job-{position}",
+                voice_type="voice",
+                voice_display_name="Voice",
+                language_code="vi-VN",
+                batch_id="shared-batch",
+                batch_position=position,
+                max_files=1,
+                max_total_chars=100,
+            )
+
+    results = await asyncio.gather(
+        create(0),
+        create(1),
+        return_exceptions=True,
+    )
+
+    assert sum(isinstance(result, TTSJobModel) for result in results) == 1
+    errors = [result for result in results if isinstance(result, HTTPException)]
+    assert len(errors) == 1
+    assert errors[0].detail == "BATCH_FILE_LIMIT_EXCEEDED"

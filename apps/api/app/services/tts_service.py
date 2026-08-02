@@ -2,7 +2,7 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Sequence
 from fastapi import HTTPException
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, text as sql_text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.tts_job import TTSJobModel
 from app.config import settings
@@ -60,6 +60,38 @@ async def assert_batch_capacity(
             detail="BATCH_TEXT_LIMIT_EXCEEDED",
         )
 
+
+def _build_tts_job(
+    *,
+    text: str,
+    voice_type: str,
+    voice_display_name: str,
+    language_code: str,
+    resource_id: str | None = None,
+    rate: float = 1.0,
+    kind: str = "generation",
+    batch_id: str | None = None,
+    batch_position: int | None = None,
+    source_file_name: str | None = None,
+    source_file_size: int | None = None,
+) -> TTSJobModel:
+    cleaned_text = text.strip()
+    return TTSJobModel(
+        kind=kind,
+        text=cleaned_text,
+        text_hash=compute_text_hash(cleaned_text),
+        voice_type=voice_type,
+        voice_display_name=voice_display_name,
+        resource_id=resource_id,
+        language_code=language_code,
+        rate=rate,
+        status="queued",
+        batch_id=batch_id,
+        batch_position=batch_position,
+        source_file_name=source_file_name,
+        source_file_size=source_file_size,
+    )
+
 async def create_tts_job(
     session: AsyncSession,
     *,
@@ -75,17 +107,14 @@ async def create_tts_job(
     source_file_name: str | None = None,
     source_file_size: int | None = None,
 ) -> TTSJobModel:
-    cleaned_text = text.strip()
-    job = TTSJobModel(
-        kind=kind,
-        text=cleaned_text,
-        text_hash=compute_text_hash(cleaned_text),
+    job = _build_tts_job(
+        text=text,
         voice_type=voice_type,
         voice_display_name=voice_display_name,
-        resource_id=resource_id,
         language_code=language_code,
+        resource_id=resource_id,
         rate=rate,
-        status="queued",
+        kind=kind,
         batch_id=batch_id,
         batch_position=batch_position,
         source_file_name=source_file_name,
@@ -95,6 +124,56 @@ async def create_tts_job(
     await session.commit()
     await session.refresh(job)
     return job
+
+
+async def create_tts_job_with_batch_limits(
+    session: AsyncSession,
+    *,
+    text: str,
+    voice_type: str,
+    voice_display_name: str,
+    language_code: str,
+    batch_id: str,
+    max_files: int,
+    max_total_chars: int,
+    resource_id: str | None = None,
+    rate: float = 1.0,
+    kind: str = "generation",
+    batch_position: int | None = None,
+    source_file_name: str | None = None,
+    source_file_size: int | None = None,
+) -> TTSJobModel:
+    try:
+        # SQLite has no row-level locks. BEGIN IMMEDIATE serializes the
+        # aggregate capacity check and insert without blocking queue readers.
+        await session.execute(sql_text("BEGIN IMMEDIATE"))
+        await assert_batch_capacity(
+            session,
+            batch_id=batch_id,
+            new_text_length=len(text.strip()),
+            max_files=max_files,
+            max_total_chars=max_total_chars,
+        )
+        job = _build_tts_job(
+            text=text,
+            voice_type=voice_type,
+            voice_display_name=voice_display_name,
+            language_code=language_code,
+            resource_id=resource_id,
+            rate=rate,
+            kind=kind,
+            batch_id=batch_id,
+            batch_position=batch_position,
+            source_file_name=source_file_name,
+            source_file_size=source_file_size,
+        )
+        session.add(job)
+        await session.commit()
+        await session.refresh(job)
+        return job
+    except BaseException:
+        await session.rollback()
+        raise
 
 async def get_job_by_id(session: AsyncSession, job_id: str) -> TTSJobModel | None:
     return await session.get(TTSJobModel, job_id)

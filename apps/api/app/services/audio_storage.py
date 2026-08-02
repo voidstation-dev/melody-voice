@@ -13,6 +13,13 @@ ALLOWED_CONTENT_TYPES = {
     "application/octet-stream",
     "video/mp4",
 }
+PROVIDER_MP3_CONTENT_TYPES = {
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/x-mpeg",
+    "application/octet-stream",
+}
+MP4_CONTENT_TYPES = {"audio/mp4", "video/mp4"}
 
 _http_client: httpx.AsyncClient | None = None
 
@@ -46,13 +53,19 @@ async def close_http_client() -> None:
     _http_client = None
 
 
-def _has_audio_signature(path: Path) -> bool:
+def _has_mp3_signature(path: Path) -> bool:
     with path.open("rb") as source:
         header = source.read(12)
     if header.startswith(b"ID3"):
         return True
     if len(header) >= 2 and header[0] == 0xFF and header[1] & 0xE0 == 0xE0:
         return True
+    return False
+
+
+def _has_mp4_signature(path: Path) -> bool:
+    with path.open("rb") as source:
+        header = source.read(12)
     return len(header) >= 8 and header[4:8] == b"ftyp"
 
 
@@ -71,7 +84,12 @@ def validate_audio_file(path: Path, *, mime_type: str) -> int:
             message=str(exc),
             retryable=False,
         ) from exc
-    if size <= 0 or not _has_audio_signature(path):
+    has_valid_signature = (
+        _has_mp4_signature(path)
+        if mime_type in MP4_CONTENT_TYPES
+        else _has_mp3_signature(path)
+    )
+    if size <= 0 or not has_valid_signature:
         raise TTSJobError(
             code="AUDIO_INVALID_CONTENT",
             message="Audio output is empty or has an invalid signature.",
@@ -98,7 +116,7 @@ async def download_audio(
                 .split(";")[0]
                 .lower()
             )
-            if content_type and content_type not in ALLOWED_CONTENT_TYPES:
+            if content_type and content_type not in PROVIDER_MP3_CONTENT_TYPES:
                 raise ValueError(f"Unexpected content type: {content_type}")
 
             total = 0
@@ -109,7 +127,7 @@ async def download_audio(
                         raise ValueError("Audio file exceeds maximum size limit")
                     output.write(chunk)
 
-        if not _has_audio_signature(temp_path):
+        if not _has_mp3_signature(temp_path):
             raise ValueError(
                 "Downloaded payload has no supported audio signature"
             )

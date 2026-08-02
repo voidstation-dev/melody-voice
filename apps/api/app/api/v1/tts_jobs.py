@@ -8,8 +8,8 @@ from app.database import get_async_session
 from app.models.tts_job import TTSJobModel
 from app.schemas.tts import CreateTTSJobRequest, TTSJobListResponse, TTSJobResponse, BatchJobCreateResponse
 from app.services.tts_service import (
-    assert_batch_capacity,
     create_tts_job,
+    create_tts_job_with_batch_limits,
     get_job_by_id,
     list_jobs,
 )
@@ -57,15 +57,6 @@ async def create_job_endpoint(
     if len(req.text) > settings.tts_max_text_chars:
         raise HTTPException(status_code=422, detail="TEXT_TOO_LONG")
 
-    if req.batchId:
-        await assert_batch_capacity(
-            session,
-            batch_id=req.batchId,
-            new_text_length=len(req.text),
-            max_files=settings.tts_max_batch_files,
-            max_total_chars=settings.tts_max_batch_total_chars,
-        )
-
     matched = voice_catalog.get_voice(req.voiceType)
     
     if not matched:
@@ -77,19 +68,29 @@ async def create_job_endpoint(
     batch_id = req.batchId if req.batchId else str(uuid.uuid4())
     batch_position = req.batchPosition if req.batchPosition is not None else 0
     
-    job = await create_tts_job(
-        session,
-        text=req.text,
-        voice_type=req.voiceType,
-        voice_display_name=matched.display_name,
-        language_code=matched.language_code,
-        resource_id=matched.resource_id,
-        rate=req.rate,
-        batch_id=batch_id,
-        batch_position=batch_position,
-        source_file_name=req.sourceFileName,
-        source_file_size=req.sourceFileSize,
+    create_job = (
+        create_tts_job_with_batch_limits
+        if req.batchId
+        else create_tts_job
     )
+    create_kwargs = {
+        "text": req.text,
+        "voice_type": req.voiceType,
+        "voice_display_name": matched.display_name,
+        "language_code": matched.language_code,
+        "resource_id": matched.resource_id,
+        "rate": req.rate,
+        "batch_id": batch_id,
+        "batch_position": batch_position,
+        "source_file_name": req.sourceFileName,
+        "source_file_size": req.sourceFileSize,
+    }
+    if req.batchId:
+        create_kwargs.update(
+            max_files=settings.tts_max_batch_files,
+            max_total_chars=settings.tts_max_batch_total_chars,
+        )
+    job = await create_job(session, **create_kwargs)
     
     await queue_manager.enqueue(job.id)
 
