@@ -1,5 +1,5 @@
 {
-  "name": "capvoice-studio-monorepo",
+  "name": "voidmelody-monorepo",
   "private": true,
   "scripts": {
     "dev:web": "cd apps/web && pnpm dev",
