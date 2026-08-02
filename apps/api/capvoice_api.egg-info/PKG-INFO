@@ -13,3 +13,4 @@ Requires-Dist: tenacity>=8.2.0
 Requires-Dist: greenlet>=3.0.0
 Requires-Dist: alembic>=1.16.5
 Requires-Dist: capcut-tts-api
+Requires-Dist: pyinstaller>=6.21.0

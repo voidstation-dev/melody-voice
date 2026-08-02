@@ -1,0 +1,26 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "enables the default permissions",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "shell:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        { "name": "bin/melody-api", "sidecar": true },
+        { "name": "bin/ffmpeg", "sidecar": true }
+      ]
+    },
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        { "name": "bin/melody-api", "sidecar": true },
+        { "name": "bin/ffmpeg", "sidecar": true }
+      ]
+    }
+  ]
+}

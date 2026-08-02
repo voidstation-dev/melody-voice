@@ -24,7 +24,7 @@ export function TextComposer({
 
   return (
     <div 
-      className={`relative flex flex-col h-full rounded-2xl p-8 shadow-sm transition-all duration-200 ease-in-out border-2 ${
+      className={`relative flex flex-1 flex-col h-full min-h-[400px] lg:min-h-0 rounded-2xl p-8 shadow-sm transition-all duration-200 ease-in-out border-2 ${
         isDragging 
           ? isValidDrag ? "border-primary bg-primary/5" : "border-destructive bg-destructive/5" 
           : "border-transparent bg-card"

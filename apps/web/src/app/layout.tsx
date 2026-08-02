@@ -1,6 +1,7 @@
 import "./globals.css"
 import { ThemeProvider } from "@/components/providers/theme-provider"
 import { QueryProvider } from "@/components/providers/query-provider"
+import { TauriProvider } from "@/contexts/tauri-provider"
 
 export const metadata = {
   title: "Melody - Text to Speech Studio",
@@ -15,9 +16,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <QueryProvider>
           <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light">
-            <QueueProvider>
-              {children}
-            </QueueProvider>
+            <TauriProvider>
+              <QueueProvider>
+                {children}
+              </QueueProvider>
+            </TauriProvider>
           </ThemeProvider>
         </QueryProvider>
       </body>

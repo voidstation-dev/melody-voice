@@ -1,16 +1,23 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+import os
+
+# Helper to get paths
+_data_dir = Path(os.environ.get("MELODY_DATA_DIR", "../../data"))
+_data_dir.mkdir(parents=True, exist_ok=True)
+_catalog_path = Path(os.environ.get("MELODY_CATALOG_PATH", "../../vendor/capcut-tts-api/Voice.json"))
+
 class Settings(BaseSettings):
     app_env: str = "development"
     api_host: str = "0.0.0.0"
-    api_port: int = 8000
-    cors_origins: list[str] = ["http://localhost:3000"]
-    database_url: str = "sqlite+aiosqlite:///../../data/app.db"
-    audio_storage_dir: Path = Path("../../data/audio")
-    preview_storage_dir: Path = Path("../../data/previews")
-    raw_response_dir: Path = Path("../../data/raw-responses")
-    capcut_catalog_path: Path = Path("../../vendor/capcut-tts-api/Voice.json")
+    api_port: int = int(os.environ.get("API_PORT", 8000))
+    cors_origins: list[str] = ["*"] # Allow electron origins like file:// or app://
+    database_url: str = f"sqlite+aiosqlite:///{_data_dir}/app.db"
+    audio_storage_dir: Path = _data_dir / "audio"
+    preview_storage_dir: Path = _data_dir / "previews"
+    raw_response_dir: Path = _data_dir / "raw-responses"
+    capcut_catalog_path: Path = _catalog_path
     tts_max_text_chars: int = 500000
     tts_min_rate: float = 0.5
     tts_max_rate: float = 2.0
