@@ -116,7 +116,7 @@ async def download_audio(
                 .split(";")[0]
                 .lower()
             )
-            if content_type and content_type not in PROVIDER_MP3_CONTENT_TYPES:
+            if content_type and content_type not in ALLOWED_CONTENT_TYPES:
                 raise ValueError(f"Unexpected content type: {content_type}")
 
             total = 0
@@ -127,10 +127,8 @@ async def download_audio(
                         raise ValueError("Audio file exceeds maximum size limit")
                     output.write(chunk)
 
-        if not _has_mp3_signature(temp_path):
-            raise ValueError(
-                "Downloaded payload has no supported audio signature"
-            )
+        if total == 0:
+            raise ValueError("Downloaded audio payload is empty")
         temp_path.replace(destination)
         return content_type or "audio/mpeg", total
     except BaseException:

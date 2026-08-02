@@ -163,6 +163,21 @@ export function TTSStudio() {
     e.target.value = "";
   };
 
+  const handleReparse = (jobText: string, fileName?: string) => {
+    if (text.trim().length > 0) {
+      setConflictDialog({
+        isOpen: true,
+        file: {
+          text: jobText,
+          fileName: fileName || "Reparsed Text",
+          sizeBytes: jobText.length,
+        },
+      });
+    } else {
+      setText(jobText);
+    }
+  };
+
   return (
     <div className="grid h-full min-h-0 gap-6 md:grid-cols-[1fr_340px] xl:grid-cols-[1fr_380px]">
       <div className="flex flex-col h-full min-h-0 relative gap-3">
@@ -266,7 +281,7 @@ export function TTSStudio() {
             isSubmitting={isSubmitting}
           />
         </div>
-        <JobQueueSidebar />
+        <JobQueueSidebar onReparse={handleReparse} />
       </div>
     </div>
   );

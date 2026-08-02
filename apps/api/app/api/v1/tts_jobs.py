@@ -37,6 +37,7 @@ def serialize_job(job: TTSJobModel) -> TTSJobResponse:
         sourceFileName=job.source_file_name,
         sourceFileSize=job.source_file_size,
         audioUrl=f"/api/v1/tts/jobs/{job.id}/audio" if job.status == "completed" else None,
+        audioDuration=job.audio_duration,
         downloadUrl=f"/api/v1/tts/jobs/{job.id}/download" if job.status == "completed" else None,
         fileSize=job.audio_file_size,
         errorCode=job.error_code,

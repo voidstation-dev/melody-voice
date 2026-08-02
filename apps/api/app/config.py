@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     preview_storage_dir: Path = _data_dir / "previews"
     raw_response_dir: Path = _data_dir / "raw-responses"
     capcut_catalog_path: Path = _catalog_path
-    tts_queue_concurrency: int = 2
+    tts_queue_concurrency: int = 3
     tts_chunk_concurrency: int = 1
     tts_max_text_chars: int = 50000
     tts_max_chunks_per_job: int = 120

@@ -8,6 +8,7 @@ type QueueContextType = {
   removeFromQueue: (jobId: string) => void;
   retryJob: (jobId: string) => void;
   clearQueue: () => void;
+  refreshQueue: () => void;
   activeJobs: TTSJob[];
   completedJobs: TTSJob[];
 };
@@ -136,6 +137,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         removeFromQueue,
         retryJob,
         clearQueue,
+        refreshQueue: () => refetchList(),
         activeJobs,
         completedJobs,
       }}

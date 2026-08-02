@@ -15,6 +15,7 @@ export type TTSJob = {
   sourceFileName: string | null
   sourceFileSize: number | null
   audioUrl: string | null
+  audioDuration: number | null
   downloadUrl: string | null
   fileSize: number | null
   errorCode: string | null
