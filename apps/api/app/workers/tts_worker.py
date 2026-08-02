@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from app.config import settings
@@ -72,8 +73,9 @@ async def execute_tts_job_step(job_id: str) -> None:
                     for pf in downloaded_files:
                         f.write(f"file '{pf.absolute()}'\n")
                 
+                ffmpeg_cmd = os.environ.get("FFMPEG_BINARY_PATH", "ffmpeg")
                 cmd = [
-                    "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                    ffmpeg_cmd, "-y", "-f", "concat", "-safe", "0",
                     "-i", str(list_file.absolute())
                 ]
                 

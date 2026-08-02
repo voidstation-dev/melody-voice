@@ -12,3 +12,9 @@ data/raw-responses/*
 !data/previews/.gitkeep
 !data/raw-responses/.gitkeep
 .env
+.DS_Store
+apps/api/build/
+*.spec
+apps/web/src-tauri/target/
+apps/web/src-tauri/gen/
+apps/web/src-tauri/bin/

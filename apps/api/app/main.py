@@ -25,3 +25,10 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api/v1")
+
+if __name__ == "__main__":
+    import uvicorn
+    import multiprocessing
+    # Required for PyInstaller multi-processing support
+    multiprocessing.freeze_support()
+    uvicorn.run(app, host=settings.api_host, port=settings.api_port, reload=False)

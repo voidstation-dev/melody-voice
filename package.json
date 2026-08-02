@@ -2,15 +2,19 @@
   "name": "capvoice-studio-monorepo",
   "private": true,
   "scripts": {
-    "dev:web": "pnpm --dir apps/web dev",
+    "dev:web": "cd apps/web && pnpm dev",
     "dev:api": "cd apps/api && source .venv/bin/activate && uvicorn app.main:app --reload --port 8000",
+    "build:deps": "cd apps/web && node scripts/setup-ffmpeg.js && cd ../api && source .venv/bin/activate && python build.py",
+    "build:ui": "cd apps/web && pnpm build",
+    "build:desktop": "pnpm build:deps && cd apps/web && pnpm tauri build",
     "lint:web": "pnpm --dir apps/web lint",
     "test:web": "pnpm --dir apps/web test",
     "test:api": "pytest apps/api/tests -v"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild"
+      "esbuild",
+      "ffmpeg-static"
     ]
   }
 }

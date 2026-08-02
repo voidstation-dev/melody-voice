@@ -4,9 +4,11 @@ from capcut_tts_api import CapCutClient
 import sys
 sys.path.append('.')
 from app.services.provider_response_parser import extract_audio_urls
+import os
 
 def get_duration(url):
-    cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", url]
+    ffmpeg_cmd = os.environ.get("FFMPEG_BINARY_PATH", "ffprobe")
+    cmd = [ffmpeg_cmd, "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", url]
     try:
         out = subprocess.check_output(cmd).decode().strip()
         return float(out)
