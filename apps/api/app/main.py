@@ -3,14 +3,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import api_router
 from app.config import settings
-from app.database import init_database
+from app.services.database_migrations import run_database_migrations
 from app.services.job_recovery import recover_jobs
 
 from app.workers.queue_manager import queue_manager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_database()
+    await run_database_migrations()
     recovered_ids = await recover_jobs()
     await queue_manager.start()
     for job_id in recovered_ids:

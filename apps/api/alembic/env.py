@@ -21,7 +21,14 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from app.database import Base
+from app.config import settings
 from app.models.tts_job import TTSJobModel # ensure models are loaded
+
+runtime_database_url = config.attributes.get(
+    "database_url",
+    settings.database_url.replace("+aiosqlite", ""),
+)
+config.set_main_option("sqlalchemy.url", runtime_database_url)
 
 # add your model's MetaData object here
 # for 'autogenerate' support
