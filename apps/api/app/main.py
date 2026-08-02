@@ -29,6 +29,14 @@ app.include_router(api_router, prefix="/api/v1")
 if __name__ == "__main__":
     import uvicorn
     import multiprocessing
+    import sys
+    
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(line_buffering=True)
+
     # Required for PyInstaller multi-processing support
     multiprocessing.freeze_support()
-    uvicorn.run(app, host=settings.api_host, port=settings.api_port, reload=False)
+    print(f"Uvicorn starting on http://{settings.api_host}:{settings.api_port}", flush=True)
+    uvicorn.run(app, host=settings.api_host, port=settings.api_port, reload=False, log_level="info")

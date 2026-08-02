@@ -153,8 +153,8 @@ export function TTSStudio() {
   };
 
   return (
-    <div className="grid h-full min-h-0 gap-8 lg:grid-cols-[1fr_360px]">
-      <div className="flex flex-col h-full min-h-0 relative gap-2">
+    <div className="grid h-full min-h-0 gap-6 md:grid-cols-[1fr_340px] xl:grid-cols-[1fr_380px]">
+      <div className="flex flex-col h-full min-h-0 relative gap-3">
         <div className="rounded-2xl border border-border bg-card p-2 shadow-sm z-20 transition-all flex items-center justify-between">
           <div className="flex items-center gap-1">
             <button

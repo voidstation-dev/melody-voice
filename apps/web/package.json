@@ -1,9 +1,10 @@
 {
-  "name": "capvoice-web",
+  "name": "voidmelody-web",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3000",
+    "tauri": "tauri",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

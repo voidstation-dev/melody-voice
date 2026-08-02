@@ -31,29 +31,35 @@ async def execute_tts_job_step(job_id: str) -> None:
                 chunks = [""]
 
             total_chunks = len(chunks)
-            downloaded_files = []
-            raw_responses = []
+            downloaded_files: list[Path | None] = [None] * total_chunks
+            raw_responses: list[dict | None] = [None] * total_chunks
             
-            for i, chunk in enumerate(chunks):
-                result = await asyncio.to_thread(
-                    provider.synthesize,
-                    text=chunk,
-                    voice_type=job.voice_type,
-                    resource_id=job.resource_id,
-                    rate=job.rate,
-                )
-                raw_responses.append(result.raw_response)
+            semaphore = asyncio.Semaphore(3)
 
-                if not result.audio_urls:
-                    raise ValueError(f"AUDIO_URL_NOT_FOUND: No playable audio URL extracted from provider for chunk {i}")
+            async def process_chunk(idx: int, chunk_text: str):
+                async with semaphore:
+                    result = await asyncio.to_thread(
+                        provider.synthesize,
+                        text=chunk_text,
+                        voice_type=job.voice_type,
+                        resource_id=job.resource_id,
+                        rate=job.rate,
+                    )
+                    raw_responses[idx] = result.raw_response
 
-                part_dest = settings.audio_storage_dir / f"{job_id}_part{i}.mp3"
-                mime, size = await download_audio(url=result.audio_urls[0], destination=part_dest)
-                downloaded_files.append(part_dest)
-                
-                # Update progress per chunk
-                job.progress = int(((i + 1) / total_chunks) * 90)
-                await session.commit()
+                    if not result.audio_urls:
+                        raise ValueError(f"AUDIO_URL_NOT_FOUND: No playable audio URL extracted from provider for chunk {idx}")
+
+                    part_dest = settings.audio_storage_dir / f"{job_id}_part{idx}.mp3"
+                    mime, size = await download_audio(url=result.audio_urls[0], destination=part_dest)
+                    downloaded_files[idx] = part_dest
+                    
+                    completed_count = sum(1 for f in downloaded_files if f is not None)
+                    job.progress = int((completed_count / total_chunks) * 90)
+                    await session.commit()
+
+            await asyncio.gather(*(process_chunk(i, c) for i, c in enumerate(chunks)))
+            valid_downloaded_files: list[Path] = [f for f in downloaded_files if f is not None]
 
             if settings.save_raw_provider_responses:
                 settings.raw_response_dir.mkdir(parents=True, exist_ok=True)
@@ -63,14 +69,14 @@ async def execute_tts_job_step(job_id: str) -> None:
 
             final_dest = settings.audio_storage_dir / f"{job_id}.mp3"
 
-            needs_ffmpeg = len(downloaded_files) > 1 or job.rate != 1.0
+            needs_ffmpeg = len(valid_downloaded_files) > 1 or job.rate != 1.0
 
             if not needs_ffmpeg:
-                downloaded_files[0].rename(final_dest)
+                valid_downloaded_files[0].rename(final_dest)
             else:
                 list_file = settings.audio_storage_dir / f"{job_id}_list.txt"
                 with list_file.open("w", encoding="utf-8") as f:
-                    for pf in downloaded_files:
+                    for pf in valid_downloaded_files:
                         f.write(f"file '{pf.absolute()}'\n")
                 
                 ffmpeg_cmd = os.environ.get("FFMPEG_BINARY_PATH", "ffmpeg")
@@ -96,7 +102,7 @@ async def execute_tts_job_step(job_id: str) -> None:
                     raise RuntimeError(f"FFmpeg processing failed: {err.decode('utf-8', errors='ignore')}")
                     
                 list_file.unlink(missing_ok=True)
-                for pf in downloaded_files:
+                for pf in valid_downloaded_files:
                     pf.unlink(missing_ok=True)
 
             final_size = final_dest.stat().st_size

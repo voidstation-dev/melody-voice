@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Melody",
+  "productName": "VoidMelody",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.voidstation.voidmelody",
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "Melody",
-        "width": 800,
-        "height": 600,
+        "title": "VoidMelody",
+        "width": 1300,
+        "height": 850,
+        "minWidth": 1024,
+        "minHeight": 700,
         "resizable": true,
         "fullscreen": false
       }

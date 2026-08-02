@@ -1,5 +1,5 @@
 {
-  "name": "capvoice-studio-monorepo",
+  "name": "voidmelody-monorepo",
   "private": true,
   "scripts": {
     "dev:web": "cd apps/web && pnpm dev",
@@ -7,6 +7,7 @@
     "build:deps": "cd apps/web && node scripts/setup-ffmpeg.js && cd ../api && source .venv/bin/activate && python build.py",
     "build:ui": "cd apps/web && pnpm build",
     "build:desktop": "pnpm build:deps && cd apps/web && pnpm tauri build",
+    "dev:desktop": "cd apps/web && pnpm tauri dev",
     "lint:web": "pnpm --dir apps/web lint",
     "test:web": "pnpm --dir apps/web test",
     "test:api": "pytest apps/api/tests -v"
