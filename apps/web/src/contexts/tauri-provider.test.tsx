@@ -1,0 +1,170 @@
+// @vitest-environment jsdom
+
+import React from "react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TauriProvider, useTauri } from "./tauri-provider";
+
+const bridge = vi.hoisted(() => ({
+  appDataDir: vi.fn(),
+  resolveResource: vi.fn(),
+  setApiConnection: vi.fn(),
+  sidecar: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/path", () => ({
+  appDataDir: bridge.appDataDir,
+  resolveResource: bridge.resolveResource,
+}));
+
+vi.mock("@tauri-apps/plugin-shell", () => ({
+  Command: { sidecar: bridge.sidecar },
+}));
+
+vi.mock("@/lib/api-client", () => ({
+  setApiConnection: bridge.setApiConnection,
+}));
+
+type OutputHandler = (line: string) => void;
+
+function makeSidecar() {
+  const stdoutHandlers: OutputHandler[] = [];
+  const stderrHandlers: OutputHandler[] = [];
+  const child = { kill: vi.fn().mockResolvedValue(undefined) };
+  const command = {
+    stdout: { on: vi.fn((_event: string, handler: OutputHandler) => stdoutHandlers.push(handler)) },
+    stderr: { on: vi.fn((_event: string, handler: OutputHandler) => stderrHandlers.push(handler)) },
+    spawn: vi.fn().mockResolvedValue(child),
+  };
+
+  return { child, command, stdoutHandlers, stderrHandlers };
+}
+
+function ContextProbe() {
+  const { isDesktop, isReady, shutdownSidecar, restartSidecar } = useTauri();
+
+  return (
+    <div>
+      <output>{isDesktop ? "desktop" : "browser"}:{isReady ? "ready" : "starting"}</output>
+      <button onClick={() => void shutdownSidecar()}>Stop</button>
+      <button onClick={() => void restartSidecar()}>Restart</button>
+    </div>
+  );
+}
+
+describe("TauriProvider", () => {
+  beforeEach(() => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: undefined,
+      writable: true,
+    });
+    bridge.appDataDir.mockResolvedValue("/app-data");
+    bridge.resolveResource.mockImplementation(async (path: string) => `/resources/${path}`);
+    bridge.setApiConnection.mockReset();
+    bridge.sidecar.mockReset();
+    vi.stubGlobal("crypto", { randomUUID: vi.fn(() => "random-token") });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("reports browser readiness without loading the desktop bridge", async () => {
+    render(
+      <TauriProvider>
+        <ContextProbe />
+      </TauriProvider>,
+    );
+
+    expect(await screen.findByText("browser:ready")).toBeInTheDocument();
+    expect(bridge.sidecar).not.toHaveBeenCalled();
+  });
+
+  it("preserves authenticated random-port bootstrap and reports desktop readiness", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const sidecar = makeSidecar();
+    bridge.sidecar.mockReturnValue(sidecar.command);
+
+    render(
+      <TauriProvider>
+        <ContextProbe />
+      </TauriProvider>,
+    );
+
+    await waitFor(() => expect(sidecar.command.spawn).toHaveBeenCalledOnce());
+    expect(bridge.sidecar).toHaveBeenCalledWith("bin/melody-api", [], {
+      env: expect.objectContaining({
+        API_HOST: "127.0.0.1",
+        API_PORT: "0",
+        MELODY_API_TOKEN: "random-token",
+        MELODY_DATA_DIR: "/app-data",
+      }),
+    });
+    expect(screen.queryByText("desktop:ready")).not.toBeInTheDocument();
+
+    act(() => sidecar.stdoutHandlers[0]("Listening on http://127.0.0.1:43127"));
+
+    expect(await screen.findByText("desktop:ready")).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:43127/api/v1/health/live", { method: "GET" });
+    expect(bridge.setApiConnection).toHaveBeenCalledWith("http://127.0.0.1:43127", "random-token");
+  });
+
+  it("awaits sidecar shutdown and can restart it with a fresh process", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const first = makeSidecar();
+    const second = makeSidecar();
+    bridge.sidecar.mockReturnValueOnce(first.command).mockReturnValueOnce(second.command);
+
+    render(
+      <TauriProvider>
+        <ContextProbe />
+      </TauriProvider>,
+    );
+    await waitFor(() => expect(first.command.spawn).toHaveBeenCalledOnce());
+    act(() => first.stdoutHandlers[0]("Listening on 127.0.0.1:41001"));
+    await screen.findByText("desktop:ready");
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    await waitFor(() => expect(first.child.kill).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: "Restart" }));
+
+    await waitFor(() => expect(second.command.spawn).toHaveBeenCalledOnce());
+    act(() => second.stderrHandlers[0]("Server started at port 41002"));
+    expect(await screen.findByText("desktop:ready")).toBeInTheDocument();
+  });
+
+  it("shows the existing startup error screen when the sidecar cannot spawn", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const sidecar = makeSidecar();
+    sidecar.command.spawn.mockRejectedValue(new Error("sidecar unavailable"));
+    bridge.sidecar.mockReturnValue(sidecar.command);
+
+    render(
+      <TauriProvider>
+        <ContextProbe />
+      </TauriProvider>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Failed to start local API" })).toBeInTheDocument();
+    expect(screen.getByText("Error: sidecar unavailable")).toBeInTheDocument();
+  });
+
+  it("starts only one sidecar across React development effect replay", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const sidecar = makeSidecar();
+    bridge.sidecar.mockReturnValue(sidecar.command);
+
+    render(
+      <React.StrictMode>
+        <TauriProvider>
+          <ContextProbe />
+        </TauriProvider>
+      </React.StrictMode>,
+    );
+
+    await waitFor(() => expect(sidecar.command.spawn).toHaveBeenCalledOnce());
+    expect(bridge.sidecar).toHaveBeenCalledOnce();
+  });
+});
