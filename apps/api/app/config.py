@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     tts_audio_max_bytes: int = 52428800
     tts_progress_commit_interval_seconds: float = 1.0
     tts_progress_commit_step_percent: int = 5
+    tts_queue_shutdown_grace_seconds: float = 15.0
     save_raw_provider_responses: bool = False
     log_level: str = "INFO"
 

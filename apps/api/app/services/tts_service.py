@@ -2,12 +2,35 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Sequence
 from fastapi import HTTPException
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.tts_job import TTSJobModel
+from app.config import settings
+from app.models.tts_job import utc_now
 
 def compute_text_hash(text: str) -> str:
     return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
+
+
+async def claim_job(session: AsyncSession, job_id: str) -> bool:
+    result = await session.execute(
+        update(TTSJobModel)
+        .where(
+            TTSJobModel.id == job_id,
+            TTSJobModel.status == "queued",
+            TTSJobModel.cancel_requested.is_(False),
+            TTSJobModel.attempt_count
+            < settings.tts_max_auto_retries + 1,
+        )
+        .values(
+            status="processing",
+            progress=0,
+            started_at=utc_now(),
+            attempt_count=TTSJobModel.attempt_count + 1,
+        )
+    )
+    await session.commit()
+    return result.rowcount == 1
 
 
 async def assert_batch_capacity(

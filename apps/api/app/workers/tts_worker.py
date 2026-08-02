@@ -25,6 +25,7 @@ from app.services.retry_policy import (
     map_provider_error,
 )
 from app.utils.text_utils import split_text_into_chunks
+from app.services.tts_service import claim_job
 
 
 async def process_chunk(
@@ -130,15 +131,11 @@ async def execute_tts_job_step(
 ) -> None:
     del worker_id  # Structured worker context is added in Phase 7.
     async with AsyncSessionLocal() as session:
-        job = await session.get(TTSJobModel, job_id)
-        if not job or job.status != "queued" or job.cancel_requested:
+        if not await claim_job(session, job_id):
             return
-
-        job.status = "processing"
-        job.progress = 0
-        job.attempt_count += 1
-        job.started_at = datetime.now(timezone.utc)
-        await session.commit()
+        job = await session.get(TTSJobModel, job_id)
+        if not job:
+            return
 
         active_provider = provider or CapCutProvider(
             catalog_path=settings.capcut_catalog_path
