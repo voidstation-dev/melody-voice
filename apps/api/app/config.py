@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     tts_max_auto_retries: int = 2
     tts_retry_base_delay_seconds: float = 2.0
     tts_apply_rate_with_ffmpeg: bool = False
+    tts_circuit_breaker_failure_threshold: int = 5
+    tts_circuit_breaker_window_seconds: float = 60.0
+    tts_circuit_breaker_cooldown_seconds: float = 30.0
     tts_audio_max_bytes: int = 52428800
     tts_progress_commit_interval_seconds: float = 1.0
     tts_progress_commit_step_percent: int = 5

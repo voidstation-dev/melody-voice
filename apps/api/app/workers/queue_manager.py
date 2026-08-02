@@ -6,14 +6,11 @@ from typing import Any
 from app.config import settings
 from app.providers.capcut_provider import CapCutProvider
 from app.services.job_recovery import requeue_interrupted_job
+from app.services.provider_circuit_breaker import ProviderCircuitBreaker
 from app.workers.tts_worker import execute_tts_job_step
 
 
 logger = logging.getLogger(__name__)
-
-
-def _default_provider_factory() -> CapCutProvider:
-    return CapCutProvider(catalog_path=settings.capcut_catalog_path)
 
 
 class TTSQueueManager:
@@ -22,11 +19,25 @@ class TTSQueueManager:
         concurrency: int = 2,
         *,
         provider_factory: Callable[[], Any] | None = None,
+        circuit_breaker: ProviderCircuitBreaker | None = None,
         shutdown_grace_seconds: float | None = None,
     ):
         self.queue: asyncio.Queue[str] = asyncio.Queue()
         self.concurrency = concurrency
-        self.provider_factory = provider_factory or _default_provider_factory
+        self.circuit_breaker = circuit_breaker or ProviderCircuitBreaker(
+            failure_threshold=(
+                settings.tts_circuit_breaker_failure_threshold
+            ),
+            window_seconds=settings.tts_circuit_breaker_window_seconds,
+            cooldown_seconds=settings.tts_circuit_breaker_cooldown_seconds,
+        )
+        self.provider_factory = provider_factory or (
+            lambda: CapCutProvider(
+                catalog_path=settings.capcut_catalog_path,
+                timeout_seconds=settings.tts_provider_timeout_seconds,
+                circuit_breaker=self.circuit_breaker,
+            )
+        )
         self.shutdown_grace_seconds = (
             settings.tts_queue_shutdown_grace_seconds
             if shutdown_grace_seconds is None

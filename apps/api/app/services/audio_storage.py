@@ -16,6 +16,16 @@ def get_http_client() -> httpx.AsyncClient:
         _http_client = httpx.AsyncClient(timeout=timeout, limits=limits, follow_redirects=True, max_redirects=5)
     return _http_client
 
+
+def _has_audio_signature(path: Path) -> bool:
+    with path.open("rb") as source:
+        header = source.read(12)
+    if header.startswith(b"ID3"):
+        return True
+    if len(header) >= 2 and header[0] == 0xFF and header[1] & 0xE0 == 0xE0:
+        return True
+    return len(header) >= 8 and header[4:8] == b"ftyp"
+
 async def download_audio(
     *,
     url: str,
@@ -42,6 +52,10 @@ async def download_audio(
                         temp_path.unlink()
                     raise ValueError("Audio file exceeds maximum size limit")
                 output.write(chunk)
+
+    if not _has_audio_signature(temp_path):
+        temp_path.unlink(missing_ok=True)
+        raise ValueError("Downloaded payload has no supported audio signature")
 
     temp_path.replace(destination)
     return content_type or "audio/mpeg", total

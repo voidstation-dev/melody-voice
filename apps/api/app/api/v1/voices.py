@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.config import settings
-from app.providers.capcut_provider import CapCutProvider
 from app.schemas.voice import VoiceListResponse, VoiceResponse
+from app.services.voice_catalog import voice_catalog
 
 router = APIRouter()
 
@@ -12,8 +11,7 @@ async def list_voices(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
 ):
-    provider = CapCutProvider(catalog_path=settings.capcut_catalog_path)
-    raw_voices = provider.list_voices(language=language)
+    raw_voices = voice_catalog.list_voices(language=language)
     
     if q:
         query_str = q.lower()

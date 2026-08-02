@@ -1,13 +1,11 @@
 from fastapi import APIRouter
-from app.config import settings
-from app.providers.capcut_provider import CapCutProvider
+from app.services.voice_catalog import voice_catalog
 
 router = APIRouter()
 
 @router.get("/health")
 async def health_check():
-    provider = CapCutProvider(catalog_path=settings.capcut_catalog_path)
-    voices = provider.list_voices()
+    voices = voice_catalog.list_voices()
     return {
         "status": "ok",
         "service": "capvoice-api",

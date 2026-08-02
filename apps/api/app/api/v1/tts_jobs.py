@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_async_session
 from app.models.tts_job import TTSJobModel
-from app.providers.capcut_provider import CapCutProvider
 from app.schemas.tts import CreateTTSJobRequest, TTSJobListResponse, TTSJobResponse, BatchJobCreateResponse
 from app.services.tts_service import (
     assert_batch_capacity,
@@ -15,6 +14,7 @@ from app.services.tts_service import (
 )
 from app.workers.tts_worker import execute_tts_job_step
 from app.utils.text_utils import split_text_into_chunks, slugify_vietnamese
+from app.services.voice_catalog import voice_catalog
 
 router = APIRouter()
 
@@ -64,9 +64,7 @@ async def create_job_endpoint(
             max_total_chars=settings.tts_max_batch_total_chars,
         )
 
-    provider = CapCutProvider(catalog_path=settings.capcut_catalog_path)
-    voices = provider.list_voices()
-    matched = next((v for v in voices if v.voice_type == req.voiceType), None)
+    matched = voice_catalog.get_voice(req.voiceType)
     
     if not matched:
         raise HTTPException(status_code=422, detail="VOICE_NOT_FOUND: Selected voice type does not exist in catalog")

@@ -14,12 +14,12 @@ async def test_job_creation_rejects_text_over_configured_limit_before_provider(
 ):
     monkeypatch.setattr(settings, "tts_max_text_chars", 10)
 
-    def provider_must_not_be_called(*args, **kwargs):
-        raise AssertionError("provider must not be called for invalid text")
+    def catalog_must_not_be_called(*args, **kwargs):
+        raise AssertionError("catalog must not be called for invalid text")
 
     monkeypatch.setattr(
-        "app.api.v1.tts_jobs.CapCutProvider.list_voices",
-        provider_must_not_be_called,
+        "app.api.v1.tts_jobs.voice_catalog.get_voice",
+        catalog_must_not_be_called,
     )
 
     async with AsyncClient(
