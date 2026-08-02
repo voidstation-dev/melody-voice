@@ -1,23 +1,15 @@
 import asyncio
 import logging
+from app.config import settings
 from app.workers.tts_worker import execute_tts_job_step
 
 logger = logging.getLogger(__name__)
 
 class TTSQueueManager:
-    _instance = None
-
-    def __new__(cls, *args, **kwargs):
-        if not cls._instance:
-            cls._instance = super(TTSQueueManager, cls).__new__(cls, *args, **kwargs)
-        return cls._instance
-
-    def __init__(self, concurrency: int = 3):
-        if not hasattr(self, 'initialized'):
-            self.queue = asyncio.Queue()
-            self.concurrency = concurrency
-            self.workers = []
-            self.initialized = True
+    def __init__(self, concurrency: int = 2):
+        self.queue: asyncio.Queue[str] = asyncio.Queue()
+        self.concurrency = concurrency
+        self.workers: list[asyncio.Task] = []
 
     async def start(self):
         logger.info("Starting TTS Queue Manager workers...")
@@ -43,7 +35,7 @@ class TTSQueueManager:
                 job_id = await self.queue.get()
                 logger.info(f"Worker {worker_id} processing job {job_id}")
                 try:
-                    await execute_tts_job_step(job_id)
+                    await execute_tts_job_step(job_id, worker_id=worker_id)
                 except Exception as e:
                     logger.error(f"Worker {worker_id} error processing job {job_id}: {e}")
                 finally:
@@ -53,4 +45,6 @@ class TTSQueueManager:
             except Exception as e:
                 logger.error(f"Worker {worker_id} encountered unexpected error: {e}")
 
-queue_manager = TTSQueueManager()
+queue_manager = TTSQueueManager(
+    concurrency=settings.tts_queue_concurrency,
+)

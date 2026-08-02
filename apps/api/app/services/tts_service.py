@@ -1,12 +1,41 @@
 import hashlib
 from datetime import datetime, timezone
 from typing import Sequence
+from fastapi import HTTPException
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.tts_job import TTSJobModel
 
 def compute_text_hash(text: str) -> str:
     return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
+
+
+async def assert_batch_capacity(
+    session: AsyncSession,
+    *,
+    batch_id: str,
+    new_text_length: int,
+    max_files: int,
+    max_total_chars: int,
+) -> None:
+    result = await session.execute(
+        select(
+            func.count(TTSJobModel.id),
+            func.coalesce(func.sum(func.length(TTSJobModel.text)), 0),
+        ).where(TTSJobModel.batch_id == batch_id)
+    )
+    file_count, total_chars = result.one()
+
+    if file_count + 1 > max_files:
+        raise HTTPException(
+            status_code=422,
+            detail="BATCH_FILE_LIMIT_EXCEEDED",
+        )
+    if int(total_chars) + new_text_length > max_total_chars:
+        raise HTTPException(
+            status_code=422,
+            detail="BATCH_TEXT_LIMIT_EXCEEDED",
+        )
 
 async def create_tts_job(
     session: AsyncSession,

@@ -7,7 +7,12 @@ from app.database import get_async_session
 from app.models.tts_job import TTSJobModel
 from app.providers.capcut_provider import CapCutProvider
 from app.schemas.tts import CreateTTSJobRequest, TTSJobListResponse, TTSJobResponse, BatchJobCreateResponse
-from app.services.tts_service import create_tts_job, get_job_by_id, list_jobs
+from app.services.tts_service import (
+    assert_batch_capacity,
+    create_tts_job,
+    get_job_by_id,
+    list_jobs,
+)
 from app.workers.tts_worker import execute_tts_job_step
 from app.utils.text_utils import split_text_into_chunks, slugify_vietnamese
 
@@ -47,6 +52,18 @@ async def create_job_endpoint(
     req: CreateTTSJobRequest,
     session: AsyncSession = Depends(get_async_session),
 ):
+    if len(req.text) > settings.tts_max_text_chars:
+        raise HTTPException(status_code=422, detail="TEXT_TOO_LONG")
+
+    if req.batchId:
+        await assert_batch_capacity(
+            session,
+            batch_id=req.batchId,
+            new_text_length=len(req.text),
+            max_files=settings.tts_max_batch_files,
+            max_total_chars=settings.tts_max_batch_total_chars,
+        )
+
     provider = CapCutProvider(catalog_path=settings.capcut_catalog_path)
     voices = provider.list_voices()
     matched = next((v for v in voices if v.voice_type == req.voiceType), None)
