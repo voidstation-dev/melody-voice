@@ -25,6 +25,7 @@ class TTSJobResponse(BaseModel):
     sourceFileName: str | None = None
     sourceFileSize: int | None = None
     audioUrl: str | None = None
+    audioDuration: float | None = None
     downloadUrl: str | None = None
     fileSize: int | None = None
     errorCode: str | None = None

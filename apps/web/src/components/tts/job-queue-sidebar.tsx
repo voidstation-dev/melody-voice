@@ -1,12 +1,14 @@
 "use client";
 import { useQueue } from "@/hooks/use-queue";
-import { Loader2, CheckCircle2, XCircle, Clock, Play, Trash2, RotateCcw, Layers } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Clock, Play, Pause, Trash2, RotateCcw, Layers, CornerUpLeft, RefreshCw } from "lucide-react";
 import { TTSJob } from "@/types/tts-job";
 import { apiFetchBlob } from "@/lib/api-client";
 import { useEffect, useState, useRef } from "react";
+import { AudioDownloadDialog } from "./audio-download-dialog";
+import { TextPreviewDialog } from "./text-preview-dialog";
 
-export function JobQueueSidebar() {
-  const { queue, activeJobs, completedJobs } = useQueue();
+export function JobQueueSidebar({ onReparse }: { onReparse?: (jobText: string, fileName?: string) => void }) {
+  const { queue, activeJobs, completedJobs, refreshQueue } = useQueue();
 
   // Sort queue: processing/queued first, then completed (newest first)
   const sortedQueue = [...queue].sort((a, b) => {
@@ -24,7 +26,7 @@ export function JobQueueSidebar() {
 
   if (queue.length === 0) {
     return (
-      <div className="relative rounded-2xl border-2 border-dashed border-border/60 bg-muted/10 p-8 flex flex-col items-center justify-center text-center overflow-hidden min-h-[240px] group transition-colors hover:border-primary/30 hover:bg-muted/20">
+      <div className="relative rounded-2xl border-2 border-dashed border-border/60 bg-card p-8 flex flex-col items-center justify-center text-center overflow-hidden min-h-[240px] group transition-colors hover:border-primary/30 mt-8">
         <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
         <div className="relative flex items-center justify-center w-14 h-14 rounded-full bg-background shadow-sm border border-border/50 mb-4 group-hover:scale-110 transition-transform duration-300">
           <Layers className="h-6 w-6 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -38,31 +40,54 @@ export function JobQueueSidebar() {
   }
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm flex flex-col gap-4 flex-1 min-h-0">
-      <div className="flex items-center justify-between shrink-0">
-        <h3 className="text-sm font-bold tracking-wider text-muted-foreground">QUEUE</h3>
-        <span className="text-xs font-medium text-muted-foreground px-2 py-0.5 rounded-full bg-muted">
-          {activeJobs.length} active
-        </span>
+    <div className="flex flex-col gap-4 flex-1 min-h-0 pt-2">
+      <div className="flex items-center justify-between shrink-0 mb-1">
+        <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">QUEUE</h3>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => refreshQueue()}
+            className="flex items-center justify-center h-6 w-6 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            title="Refresh Queue"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
+          <span className="text-xs font-medium text-muted-foreground px-2 py-0.5 rounded-full bg-muted">
+            {activeJobs.length} active
+          </span>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 overflow-y-auto pr-1 pb-2">
         {sortedQueue.map((job) => (
-          <JobItem key={job.id} job={job} />
+          <JobItem key={job.id} job={job} onReparse={onReparse} />
         ))}
       </div>
     </div>
   );
 }
 
-function JobItem({ job }: { job: TTSJob }) {
+function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string, fileName?: string) => void }) {
   const { removeFromQueue, retryJob } = useQueue();
   const [playing, setPlaying] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const [downloadFormat, setDownloadFormat] = useState<"mp3" | "m4a" | null>(null);
   const [downloadingFormat, setDownloadingFormat] = useState<"mp3" | "m4a" | null>(null);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioBlobUrlRef = useRef<string | null>(null);
+
+  const formatTime = (time: number) => {
+    if (isNaN(time)) return "0:00";
+    const m = Math.floor(time / 60);
+    const s = Math.floor(time % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   useEffect(() => {
     return () => {
@@ -89,17 +114,37 @@ function JobItem({ job }: { job: TTSJob }) {
     await audioRef.current.play();
   };
 
-  const handleDownload = async (format: "mp3" | "m4a") => {
-    if (!job.downloadUrl) return;
+  const handleDownloadClick = (format: "mp3" | "m4a") => {
+    setDownloadFormat(format);
+    setDownloadOpen(true);
+  };
+
+  const handleStartDownload = async (format: "mp3" | "m4a", fileName: string) => {
+    if (!job.downloadUrl || !fileName.trim()) return;
     setDownloadingFormat(format);
     try {
       const blob = await apiFetchBlob(`${job.downloadUrl}?format=${format}`);
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = `melody-${job.id}.${format}`;
-      anchor.click();
-      URL.revokeObjectURL(objectUrl);
+      const finalFileName = `${fileName.trim()}.${format}`;
+      // Import downloadBlob at the top! Wait, downloadBlob is in utils, which we import from apiFetchBlob is. We will import downloadBlob above.
+      // Actually we will use the same downloadBlob logic here.
+      // Let's create an anchor directly since downloadBlob is in @/lib/utils but we might not have imported it in this file.
+      // Wait, we can import it in job-queue-sidebar.tsx.
+      // Let's check imports first.
+      
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.style.display = "none";
+      a.href = url;
+      a.download = finalFileName;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 100);
+      
+    } catch (err) {
+      console.error("Download failed:", err);
     } finally {
       setDownloadingFormat(null);
     }
@@ -117,7 +162,7 @@ function JobItem({ job }: { job: TTSJob }) {
   };
 
   return (
-    <div className={`shrink-0 relative overflow-hidden rounded-xl border p-3.5 flex flex-col gap-3 transition-all duration-300 ${
+    <div className={`shrink-0 relative rounded-xl border p-3 flex flex-col gap-2.5 transition-all duration-300 ${
       job.status === "completed" ? "bg-primary/[0.02] border-primary/20 shadow-sm" : 
       job.status === "processing" ? "bg-background border-primary/30 shadow-md shadow-primary/5" :
       job.status === "failed" ? "bg-destructive/[0.02] border-destructive/20" :
@@ -125,131 +170,202 @@ function JobItem({ job }: { job: TTSJob }) {
     }`}>
       {/* Subtle background progress bar for processing */}
       {job.status === "processing" && (
-        <div 
-          className="absolute bottom-0 left-0 h-[3px] bg-primary transition-all duration-500 ease-out"
-          style={{ width: `${job.progress ?? 0}%` }}
-        />
-      )}
-
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            {job.sourceFileName && (
-              <span className="truncate max-w-[120px] rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground border border-border/50">
-                {job.sourceFileName}
-              </span>
-            )}
-            
-            <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary border border-primary/20">
-              {job.rate?.toFixed(1) || "1.0"}x
-            </span>
-            
-            {/* Show processing status and progress */}
-            {job.status === "processing" && (
-              <span className="text-[9px] font-black uppercase tracking-widest text-primary">
-                PROCESSING {job.progress !== null ? `· ${job.progress}%` : ""}
-              </span>
-            )}
-            
-            {/* Show duration if completed or failed */}
-            {(job.status === "completed" || job.status === "failed") && job.startedAt && (job.completedAt || job.updatedAt) && (
-              <span className="text-[10px] font-medium text-muted-foreground/60">
-                {(() => {
-                  const start = new Date(job.startedAt).getTime();
-                  const end = new Date(job.completedAt || job.updatedAt).getTime();
-                  const diff = Math.max(0, Math.round((end - start) / 1000));
-                  if (diff < 60) return `${diff}s`;
-                  const m = Math.floor(diff / 60);
-                  const s = diff % 60;
-                  return `${m}m ${s}s`;
-                })()}
-              </span>
-            )}
-          </div>
-          <p className={`text-xs leading-relaxed line-clamp-2 ${job.status === "completed" ? "text-foreground font-medium" : "text-muted-foreground"}`}>
-            {job.textPreview}
-          </p>
-        </div>
-        
-        <div className="shrink-0 flex items-center gap-1.5">
-          <div className="flex items-center justify-center h-8 w-8 rounded-full bg-background border border-border/50 shadow-sm">
-            {job.status === "queued" && <Clock className="h-4 w-4 text-muted-foreground" />}
-            {job.status === "processing" && <Loader2 className="h-4 w-4 text-primary animate-spin" />}
-            {job.status === "completed" && <CheckCircle2 className="h-4 w-4 text-green-500" />}
-            {job.status === "failed" && <XCircle className="h-4 w-4 text-red-500" />}
-          </div>
-          
-          {job.status === "failed" && (
-            <button 
-              onClick={handleRetry}
-              disabled={isRetrying}
-              className="flex items-center justify-center h-8 w-8 rounded-full bg-background border border-border/50 shadow-sm text-blue-500/70 hover:text-blue-500 hover:border-blue-500/30 hover:bg-blue-500/5 transition-all cursor-pointer disabled:opacity-50"
-              title="Retry Job"
-            >
-              <RotateCcw className={`h-3.5 w-3.5 ${isRetrying ? "animate-spin" : ""}`} />
-            </button>
-          )}
-
-          <button 
-            onClick={handleDelete}
-            disabled={isDeleting}
-            className="flex items-center justify-center h-8 w-8 rounded-full bg-background border border-border/50 shadow-sm text-red-500/70 hover:text-red-500 hover:border-red-500/30 hover:bg-red-500/5 transition-all cursor-pointer disabled:opacity-50"
-            title="Delete Job"
-          >
-            {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-          </button>
-        </div>
-      </div>
-
-      {job.status === "completed" && job.audioUrl && (
-        <div className="flex items-center gap-2 mt-1 pt-3 border-t border-border/40">
-          <button 
-            onClick={togglePlay}
-            className={`flex-1 flex items-center justify-center gap-2 rounded-lg py-2 text-[10px] font-extrabold uppercase tracking-wider transition-all ${
-              playing 
-                ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" 
-                : "bg-primary/10 text-primary hover:bg-primary/20"
-            }`}
-          >
-            <Play className={`h-3 w-3 ${playing ? "animate-pulse" : ""}`} />
-            {playing ? "Pause" : "Play"}
-          </button>
-          
-          <div className="flex-none flex items-center gap-1.5">
-            <button
-              onClick={() => handleDownload("mp3")}
-              disabled={downloadingFormat !== null}
-              className="flex items-center justify-center px-2.5 py-2 rounded-lg border border-border hover:bg-muted text-[10px] font-bold text-muted-foreground hover:text-foreground transition-colors"
-              title="Download MP3"
-            >
-              {downloadingFormat === "mp3" ? <Loader2 className="h-3 w-3 animate-spin" /> : "MP3"}
-            </button>
-            <button
-              onClick={() => handleDownload("m4a")}
-              disabled={downloadingFormat !== null}
-              className="flex items-center justify-center px-2.5 py-2 rounded-lg border border-border hover:bg-muted text-[10px] font-bold text-muted-foreground hover:text-foreground transition-colors"
-              title="Download M4A"
-            >
-              {downloadingFormat === "m4a" ? <Loader2 className="h-3 w-3 animate-spin" /> : "M4A"}
-            </button>
-          </div>
-          
-          <audio 
-            ref={audioRef} 
-            onEnded={() => setPlaying(false)} 
-            onPause={() => setPlaying(false)}
-            onPlay={() => setPlaying(true)}
-            className="hidden" 
+        <div className="absolute inset-0 pointer-events-none rounded-xl overflow-hidden z-10">
+          <div 
+            className="absolute bottom-0 left-0 h-[2px] bg-primary transition-all duration-500 ease-out"
+            style={{ width: `${job.progress ?? 0}%` }}
           />
         </div>
       )}
 
+      {/* HEADER: Badges and Actions */}
+      <div className="flex items-center justify-between gap-2 relative z-30">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <div className={`flex items-center justify-center px-1.5 h-5 rounded-[4px] text-[9px] font-extrabold tracking-wider uppercase border shadow-sm ${
+            job.status === "completed" ? "bg-green-500/10 text-green-600 border-green-500/20" :
+            job.status === "failed" ? "bg-red-500/10 text-red-600 border-red-500/20" :
+            job.status === "processing" ? "bg-primary/10 text-primary border-primary/20" :
+            "bg-muted/50 text-muted-foreground border-border/50"
+          }`}>
+            {job.status === "processing" && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+            {job.status}
+            {job.status === "processing" && job.progress !== null && job.progress !== undefined && (
+              <span className="ml-1 opacity-80 tracking-normal font-bold">· {job.progress}%</span>
+            )}
+          </div>
+          
+          <span className="rounded-[4px] bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary border border-primary/20">
+            {job.rate?.toFixed(1) || "1.0"}x
+          </span>
+
+          {(job.status === "completed" || job.status === "failed") && job.startedAt && (job.completedAt || job.updatedAt) && (
+            <span className="text-[9px] font-medium text-muted-foreground/60 flex items-center gap-1">
+              <Clock className="w-2.5 h-2.5" />
+              {(() => {
+                const start = new Date(job.startedAt).getTime();
+                const end = new Date(job.completedAt || job.updatedAt).getTime();
+                const diff = Math.max(0, Math.round((end - start) / 1000));
+                if (diff < 60) return `${diff}s`;
+                return `${Math.floor(diff / 60)}m ${diff % 60}s`;
+              })()}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-0.5 -mr-1">
+          {job.status === "failed" && (
+            <div className="relative group flex items-center justify-center">
+              <button 
+                onClick={handleRetry}
+                disabled={isRetrying}
+                className="flex items-center justify-center h-6 w-6 rounded-md hover:bg-blue-500/10 text-muted-foreground hover:text-blue-500 transition-colors disabled:opacity-50"
+              >
+                <RotateCcw className={`h-3.5 w-3.5 ${isRetrying ? "animate-spin" : ""}`} />
+              </button>
+              <div className="absolute top-full mt-1.5 right-0 px-2 py-1 bg-foreground text-background font-medium text-[9px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                Retry Job
+              </div>
+            </div>
+          )}
+
+          <div className="relative group flex items-center justify-center">
+            <button 
+              onClick={() => setPreviewOpen(true)}
+              className="flex items-center justify-center h-6 w-6 rounded-md hover:bg-indigo-500/10 text-muted-foreground hover:text-indigo-500 transition-colors"
+            >
+              <Layers className="h-3.5 w-3.5" />
+            </button>
+            <div className="absolute top-full mt-1.5 right-0 px-2 py-1 bg-foreground text-background font-medium text-[9px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+              Preview Text
+            </div>
+          </div>
+          
+          <div className="relative group flex items-center justify-center">
+            <button 
+              onClick={() => onReparse?.(job.text, job.sourceFileName || undefined)}
+              className="flex items-center justify-center h-6 w-6 rounded-md hover:bg-orange-500/10 text-muted-foreground hover:text-orange-500 transition-colors"
+            >
+              <CornerUpLeft className="h-3.5 w-3.5" />
+            </button>
+            <div className="absolute top-full mt-1.5 right-0 px-2 py-1 bg-foreground text-background font-medium text-[9px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+              Load to Composer
+            </div>
+          </div>
+
+          <div className="relative group flex items-center justify-center">
+            <button 
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="flex items-center justify-center h-6 w-6 rounded-md hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-colors disabled:opacity-50"
+            >
+              {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            </button>
+            <div className="absolute top-full mt-1.5 right-0 px-2 py-1 bg-foreground text-background font-medium text-[9px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+              Delete Job
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* CONTENT: Text Preview */}
+      <div className="bg-muted/40 rounded-lg p-2.5 border border-border/40 relative z-20">
+        <p className={`text-xs leading-relaxed line-clamp-2 ${job.status === "completed" ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+          {job.textPreview}
+        </p>
+      </div>
+
+      {/* FOOTER: Audio Player & Formats */}
+      {job.status === "completed" && job.audioUrl && (
+        <div className="flex items-center gap-2 pt-0.5 relative z-20">
+          <div className="flex-1 flex items-center gap-2 rounded-lg bg-muted/40 border border-border/50 p-1 pl-1.5 pr-2.5 h-8 shadow-sm">
+            <button
+              onClick={togglePlay}
+              className={`flex-none flex items-center justify-center h-6 w-6 rounded-md transition-all ${
+                playing 
+                  ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20" 
+                  : "bg-background shadow-sm hover:bg-primary/10 hover:text-primary text-muted-foreground"
+              }`}
+            >
+              {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 ml-0.5" />}
+            </button>
+            
+            <div 
+              className="flex-1 h-1.5 bg-border/50 rounded-full overflow-hidden cursor-pointer relative"
+              onClick={(e) => {
+                if (!audioRef.current || !duration) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                const percent = (e.clientX - rect.left) / rect.width;
+                audioRef.current.currentTime = percent * duration;
+                setCurrentTime(percent * duration);
+              }}
+            >
+              <div 
+                className="absolute top-0 left-0 h-full bg-primary transition-all duration-100 ease-linear"
+                style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
+              />
+            </div>
+            
+            <div className="flex items-center gap-1 flex-none text-[9px] font-medium text-muted-foreground/80 tabular-nums">
+              <span>{formatTime(currentTime)}</span>
+              <span>/</span>
+              <span className="text-primary/70">{formatTime(duration || job.audioDuration || 0)}</span>
+            </div>
+          </div>
+          
+          <div className="flex-none flex items-center gap-1.5">
+            <button
+              onClick={() => handleDownloadClick("mp3")}
+              disabled={downloadingFormat !== null}
+              className="flex items-center justify-center px-2 py-1.5 h-8 rounded-lg border border-border bg-background hover:bg-muted text-[9px] font-extrabold tracking-wider text-muted-foreground hover:text-foreground transition-colors shadow-sm disabled:opacity-50"
+            >
+              {downloadingFormat === "mp3" ? <Loader2 className="h-3 w-3 animate-spin" /> : "MP3"}
+            </button>
+            <button
+              onClick={() => handleDownloadClick("m4a")}
+              disabled={downloadingFormat !== null}
+              className="flex items-center justify-center px-2 py-1.5 h-8 rounded-lg border border-border bg-background hover:bg-muted text-[9px] font-extrabold tracking-wider text-muted-foreground hover:text-foreground transition-colors shadow-sm disabled:opacity-50"
+            >
+              {downloadingFormat === "m4a" ? <Loader2 className="h-3 w-3 animate-spin" /> : "M4A"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <audio 
+        ref={audioRef} 
+        onEnded={() => setPlaying(false)} 
+        onPause={() => setPlaying(false)}
+        onPlay={() => setPlaying(true)}
+        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        className="hidden" 
+      />
+
       {job.status === "failed" && (
-        <div className="mt-1 p-2 rounded-md bg-destructive/10 border border-destructive/20">
+        <div className="mt-1 p-2 rounded-md bg-destructive/10 border border-destructive/20 relative z-20">
           <p className="text-[10px] font-medium text-destructive">
             {job.errorMessage || "An error occurred"}
           </p>
         </div>
+      )}
+
+      <TextPreviewDialog 
+        isOpen={previewOpen} 
+        onClose={() => setPreviewOpen(false)} 
+        job={job} 
+      />
+      
+      {downloadFormat && (
+        <AudioDownloadDialog 
+          isOpen={downloadOpen} 
+          onClose={() => setDownloadOpen(false)} 
+          job={job} 
+          format={downloadFormat} 
+          onStartDownload={(fileName) => {
+            setDownloadOpen(false);
+            handleStartDownload(downloadFormat, fileName);
+          }}
+        />
       )}
     </div>
   );

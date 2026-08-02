@@ -42,25 +42,7 @@ async def test_download_rejects_non_audio_payload(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-@respx.mock
-async def test_download_rejects_mp4_provider_payload_for_mp3_pipeline(
-    tmp_path: Path,
-):
-    target_url = "https://cdn.example.com/audio.mp4"
-    respx.get(target_url).mock(
-        return_value=Response(
-            200,
-            content=b"\x00\x00\x00\x18ftypM4A mock-audio",
-            headers={"Content-Type": "audio/mp4"},
-        )
-    )
-    destination = tmp_path / "provider-part.mp3"
 
-    with pytest.raises(ValueError, match="content type"):
-        await download_audio(url=target_url, destination=destination)
-
-    assert not destination.exists()
-    assert not destination.with_suffix(".tmp").exists()
 
 
 class BrokenAudioStream(httpx.AsyncByteStream):

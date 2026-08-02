@@ -83,18 +83,22 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
       });
 
       const probeHealth = async (url: string) => {
-        try {
-          const response = await fetch(`${url}/api/v1/health/live`, { method: "GET" });
-          if (response.ok && mountedRef.current && !didResolve) {
-            didResolve = true;
-            console.log(`Successfully connected to API at ${url}`);
-            setApiConnection(url, apiToken);
-            setIsReady(true);
-            resolveReady?.();
-            return true;
+        for (let attempt = 0; attempt < 10; attempt++) {
+          try {
+            const response = await fetch(`${url}/api/v1/health/live`, { method: "GET" });
+            if (response.ok && mountedRef.current && !didResolve) {
+              didResolve = true;
+              console.log(`Successfully connected to API at ${url}`);
+              setApiConnection(url, apiToken);
+              setIsReady(true);
+              resolveReady?.();
+              return true;
+            }
+          } catch {
+            // The sidecar may log its address before it is ready to accept requests.
           }
-        } catch {
-          // The sidecar may log its address before it is ready to accept requests.
+          if (didResolve || !mountedRef.current) break;
+          await new Promise((r) => setTimeout(r, 500));
         }
         return false;
       };

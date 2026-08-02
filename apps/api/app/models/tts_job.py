@@ -34,6 +34,7 @@ class TTSJobModel(Base):
     audio_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     audio_mime_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     audio_file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    audio_duration: Mapped[float | None] = mapped_column(Float, nullable=True)
     raw_response_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

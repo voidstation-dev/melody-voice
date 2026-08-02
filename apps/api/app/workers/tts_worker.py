@@ -14,6 +14,7 @@ from app.providers.capcut_provider import CapCutProvider
 from app.services.audio_storage import download_audio
 from app.services.audio_storage import validate_audio_file
 from app.services.audio_cleanup import cleanup_job_artifacts
+from app.utils.audio_utils import get_audio_duration
 from app.services.chunk_executor import (
     ChunkLimitExceeded,
     ChunkResult,
@@ -241,11 +242,14 @@ async def execute_tts_job_step(
                 final_destination,
                 mime_type="audio/mpeg",
             )
+            
+            audio_duration = await get_audio_duration(final_destination)
 
             job.status = "completed"
             job.audio_path = str(final_destination)
             job.audio_mime_type = "audio/mpeg"
             job.audio_file_size = final_size
+            job.audio_duration = audio_duration
             job.progress = 100
             job.completed_at = datetime.now(timezone.utc)
             logger.info(

@@ -58,7 +58,35 @@ async def convert_mp3_to_m4a(input_path: str, output_path: str) -> None:
                     ),
                     retryable=False,
                 )
+
             validate_audio_file(temporary, mime_type="audio/mp4")
             temporary.replace(output)
         finally:
             temporary.unlink(missing_ok=True)
+
+async def get_audio_duration(file_path: Path) -> float | None:
+    ffmpeg_binary = os.environ.get("FFMPEG_BINARY_PATH", "ffmpeg")
+    command = [
+        ffmpeg_binary,
+        "-i",
+        str(file_path.resolve()),
+    ]
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await process.communicate()
+        output = stderr.decode("utf-8", errors="ignore")
+        
+        # Parse Duration: HH:MM:SS.ms
+        import re
+        match = re.search(r"Duration:\s*(\d{2}):(\d{2}):(\d{2}\.\d+)", output)
+        if match:
+            h, m, s = match.groups()
+            duration = float(h) * 3600 + float(m) * 60 + float(s)
+            return duration
+        return None
+    except BaseException:
+        return None
