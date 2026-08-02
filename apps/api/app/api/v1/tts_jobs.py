@@ -125,7 +125,12 @@ async def stream_audio_endpoint(
         file_path = m4a_path
         media_type = "audio/mp4"
 
-    return FileResponse(path=file_path, media_type=media_type, filename=f"capvoice-{job.id}.{format}")
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "public, max-age=31536000, immutable",
+    }
+
+    return FileResponse(path=file_path, media_type=media_type, filename=f"capvoice-{job.id}.{format}", headers=headers)
 
 @router.get("/tts/jobs/{job_id}/download")
 async def download_audio_endpoint(
@@ -149,11 +154,17 @@ async def download_audio_endpoint(
     slug = slugify_vietnamese(job.text)
     filename = f"{slug}.{format}"
         
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "public, max-age=31536000, immutable",
+    }
+
     return FileResponse(
         path=file_path, 
         media_type=media_type, 
         filename=filename,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        headers=headers
     )
 
 @router.delete("/tts/jobs/{job_id}", status_code=status.HTTP_204_NO_CONTENT)

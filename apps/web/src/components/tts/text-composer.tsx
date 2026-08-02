@@ -24,21 +24,26 @@ export function TextComposer({
 
   return (
     <div 
-      className={`relative flex flex-1 flex-col h-full min-h-[400px] lg:min-h-0 rounded-2xl p-8 shadow-sm transition-all duration-200 ease-in-out border-2 ${
+      className={`relative flex flex-1 flex-col h-full min-h-[300px] rounded-2xl p-6 shadow-sm transition-all duration-200 ease-in-out border-2 ${
         isDragging 
           ? isValidDrag ? "border-primary bg-primary/5" : "border-destructive bg-destructive/5" 
           : "border-transparent bg-card"
       }`}
       {...dragProps}
     >
-      <h2 className="mb-6 text-sm font-semibold text-foreground">
-        Text to Speech Playground
-      </h2>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
+          Text to Speech Playground
+        </h2>
+        <span className="text-xs font-semibold text-muted-foreground/70">
+          {value.length.toLocaleString()} / {maxLength.toLocaleString()} chars
+        </span>
+      </div>
 
-      <div className="relative flex-1">
+      <div className="relative flex-1 min-h-0 w-full">
         {/* Beautiful Placeholder - Only visible when empty */}
         {!hasText && (
-          <div className="pointer-events-none absolute inset-0 text-xl lg:text-2xl font-medium leading-relaxed text-muted-foreground/30">
+          <div className="pointer-events-none absolute inset-0 text-base lg:text-lg font-normal leading-relaxed text-muted-foreground/30 p-1">
             Welcome to <span className="bg-primary/20 text-primary px-2 py-0.5 rounded-lg inline-block font-bold">Melody</span>, your premium voice synthesis studio.
             <br />
             <br />
@@ -53,7 +58,7 @@ export function TextComposer({
           disabled={disabled}
           maxLength={maxLength}
           placeholder=""
-          className="absolute inset-0 h-full w-full resize-none bg-transparent text-xl lg:text-2xl font-medium leading-relaxed text-foreground focus:outline-none disabled:opacity-50 z-10 custom-scrollbar"
+          className="absolute inset-0 h-full w-full resize-none bg-transparent text-base lg:text-lg font-normal leading-relaxed text-foreground focus:outline-none disabled:opacity-50 z-10 custom-scrollbar p-1"
         />
       </div>
 

@@ -19,8 +19,33 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
     }
 
     let sidecarProcess: any = null;
+    let isMounted = true;
+    let pollTimer: any = null;
+
+    async function probeHealth(url: string) {
+      try {
+        const res = await fetch(`${url}/api/v1/health`, { method: "GET" });
+        if (res.ok && isMounted) {
+          console.log(`Successfully connected to API at ${url}`);
+          setApiBaseUrl(url);
+          setIsReady(true);
+          return true;
+        }
+      } catch (e) {
+        // Not reachable yet
+      }
+      return false;
+    }
 
     async function bootstrap() {
+      // First check existing backend on port 8000
+      if (await probeHealth("http://localhost:8000")) return;
+
+      // Start periodic health probe on 8000
+      pollTimer = setInterval(() => {
+        probeHealth("http://localhost:8000");
+      }, 1000);
+
       try {
         const dataDir = await appDataDir();
         const catalogPath = await resolveResource("bin/Voice.json");
@@ -37,6 +62,7 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
 
         const sidecar = Command.sidecar("bin/melody-api", [], {
           env: {
+            PYTHONUNBUFFERED: "1",
             API_PORT: apiPort,
             MELODY_DATA_DIR: dataDir,
             MELODY_CATALOG_PATH: catalogPath,
@@ -46,13 +72,13 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
 
         const handleOutput = (line: string, source: "STDOUT" | "STDERR") => {
           console.log(`[API ${source}]:`, line);
-          if (!isReady) {
-            const match = line.match(/Uvicorn running on http:\/\/(.+?):(\d+)/);
-            if (match) {
-              const port = match[2];
+          const match = line.match(/(?:http:\/\/|0\.0\.0\.0:|127\.0\.0\.1:)(\d+)/) || line.match(/port\s+(\d+)/i);
+          if (match && isMounted) {
+            const port = match[1];
+            if (port && port !== "0") {
+              const url = `http://127.0.0.1:${port}`;
               console.log(`Resolved local API port from ${source}: ${port}`);
-              setApiBaseUrl(`http://127.0.0.1:${port}`);
-              setIsReady(true);
+              probeHealth(url);
             }
           }
         };
@@ -63,13 +89,18 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
         sidecarProcess = await sidecar.spawn();
       } catch (err: any) {
         console.error("Failed to bootstrap Tauri sidecar", err);
-        setError(err.toString());
+        const fallbackOk = await probeHealth("http://localhost:8000");
+        if (!fallbackOk && isMounted) {
+          setError(err.toString());
+        }
       }
     }
 
     bootstrap();
 
     return () => {
+      isMounted = false;
+      if (pollTimer) clearInterval(pollTimer);
       if (sidecarProcess) {
         sidecarProcess.kill();
       }
