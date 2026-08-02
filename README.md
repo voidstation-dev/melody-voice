@@ -88,10 +88,36 @@ The API sidecar input is generated at `apps/web/src-tauri/bin/melody-api-<target
 
 ## Release and update workflow
 
-1. Update the desktop version in `apps/web/src-tauri/tauri.conf.json`.
+### One-time release signing setup
+
+Generate the updater signer once and keep the private key outside the repository:
+
+```bash
+pnpm --dir apps/web tauri signer generate -w ~/.tauri/voidmelody-updater.key
+```
+
+Copy the generated public key into `apps/web/src-tauri/tauri.conf.json` at `plugins.updater.pubkey`. Do not commit, print, or share the private key at `~/.tauri/voidmelody-updater.key`.
+
+In the GitHub repository settings, add these Actions secrets:
+
+- `TAURI_SIGNING_PRIVATE_KEY`: the private key stored in `~/.tauri/voidmelody-updater.key`.
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: the signer password, if one was used (leave it empty for the current unencrypted key).
+
+The release workflow receives these secrets only in the Tauri build step. `GITHUB_TOKEN` is used only to upload the release assets.
+
+### Draft release process
+
+1. Set the same version in `apps/web/src-tauri/tauri.conf.json`, `apps/web/src-tauri/Cargo.toml`, and `apps/web/package.json`, then add its exact `## [X.Y.Z]` section to `CHANGELOG.md`.
 2. From a clean checkout, run `pnpm setup:desktop`, `pnpm test:api`, `pnpm test:web`, and `pnpm build:desktop` on each supported platform.
-3. Commit the version change, create a version tag such as `v0.1.1`, and push the tag.
-4. The GitHub release workflow checks out submodules recursively, runs the same `pnpm setup:desktop` workflow on macOS, Windows, and Ubuntu, then creates a draft release with platform artifacts. Review and publish that draft in GitHub.
+3. Run `pnpm test:release-metadata` locally. The helper rejects any non-`vX.Y.Z` tag, version mismatch, or missing changelog section.
+4. Commit the version change, create an exact tag such as `v0.2.1`, and push the tag. The workflow builds only macOS ARM64 and Windows x64, then creates a draft release with installers, updater archives/signatures, and `latest.json`.
+5. Test the draft artifacts before selecting **Publish release** in GitHub. Publishing remains a manual action.
+
+### Updater smoke tests and rollback
+
+For the first migration, install a manually built or existing `0.1.0` application, publish the signed `0.2.0` draft, and confirm that the application upgrades to `0.2.0` from the updater prompt. For the next release, install `0.2.0`, publish a signed `0.2.1` draft, and confirm the `0.2.0` to `0.2.1` updater path, including download, install, and restart.
+
+Do not attempt to replace a published release in place. To roll back a bad release, first unpublish it, then issue and publish a higher fixed version (for example, `0.2.2`) so installed clients can move forward safely.
 
 > **Ghi chú tiếng Việt:** Mỗi bản phát hành cần build trên từng hệ điều hành để tạo đúng file cài đặt và sidecar cho nền tảng đó.
 
