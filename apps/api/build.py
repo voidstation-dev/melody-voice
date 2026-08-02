@@ -27,6 +27,7 @@ def main():
     subprocess.run([
         "pyinstaller",
         "--name", "melody-api",
+        "--paths", ".",
         "--hidden-import=aiosqlite",
         "--onefile",
         "--clean",
