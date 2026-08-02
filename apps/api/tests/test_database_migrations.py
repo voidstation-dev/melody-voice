@@ -1,4 +1,5 @@
 import sqlite3
+import logging
 from pathlib import Path
 
 import pytest
@@ -66,6 +67,24 @@ async def test_migrations_create_fresh_database(tmp_path):
         ).fetchone()[0]
     assert "tts_jobs" in tables
     assert revision == HEAD_REVISION
+
+
+@pytest.mark.asyncio
+async def test_runtime_migration_preserves_application_logging(tmp_path):
+    database_path = tmp_path / "logging.db"
+    root_logger = logging.getLogger()
+    original_handlers = list(root_logger.handlers)
+    marker_handler = logging.NullHandler()
+    root_logger.handlers = [marker_handler]
+    try:
+        await run_database_migrations(
+            database_url=sqlite_url(database_path),
+            alembic_ini_path=ALEMBIC_INI,
+        )
+
+        assert root_logger.handlers == [marker_handler]
+    finally:
+        root_logger.handlers = original_handlers
 
 
 def create_legacy_database(database_path: Path) -> None:

@@ -151,6 +151,7 @@ def _run_database_migrations(
     sync_url = _sync_database_url(database_url)
     config.set_main_option("sqlalchemy.url", sync_url)
     config.attributes["database_url"] = sync_url
+    config.attributes["configure_logger"] = False
     head_revision = ScriptDirectory.from_config(config).get_current_head()
     database_path = _sqlite_database_path(database_url)
 
