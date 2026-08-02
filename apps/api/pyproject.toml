@@ -26,3 +26,13 @@ packages = ["app"]
 
 [tool.uv.sources]
 capcut-tts-api = { path = "../../vendor/capcut-tts-api" }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "respx>=0.21.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

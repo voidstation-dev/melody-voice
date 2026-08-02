@@ -1,0 +1,11 @@
+{
+  "status": "success",
+  "data": {
+    "tasks": [
+      {
+        "status": "success",
+        "output": "{\"play_url\":\"https://cdn.example.invalid/audio/sample.mp3\"}"
+      }
+    ]
+  }
+}

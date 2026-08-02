@@ -1,0 +1,3 @@
+[submodule "vendor/capcut-tts-api"]
+	path = vendor/capcut-tts-api
+	url = https://github.com/K07VN/capcut-tts-api

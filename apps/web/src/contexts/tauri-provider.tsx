@@ -1,115 +1,197 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Command } from "@tauri-apps/plugin-shell";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Command, type Child } from "@tauri-apps/plugin-shell";
 import { appDataDir, resolveResource } from "@tauri-apps/api/path";
-import { setApiBaseUrl } from "@/lib/api-client";
 import { Loader2 } from "lucide-react";
+import { setApiConnection } from "@/lib/api-client";
+
+type TauriContextValue = {
+  isDesktop: boolean;
+  isReady: boolean;
+  shutdownSidecar: () => Promise<void>;
+  restartSidecar: () => Promise<void>;
+};
+
+const TauriContext = createContext<TauriContextValue | null>(null);
+
+function hasTauriRuntime() {
+  return (
+    typeof window !== "undefined" &&
+    Boolean((window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+  );
+}
+
+export function useTauri() {
+  const context = useContext(TauriContext);
+  if (!context) {
+    throw new Error("useTauri must be used within TauriProvider");
+  }
+  return context;
+}
 
 export function TauriProvider({ children }: { children: React.ReactNode }) {
+  const [isDesktop, setIsDesktop] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(false);
+  const sidecarProcessRef = useRef<Child | null>(null);
+  const startPromiseRef = useRef<Promise<void> | null>(null);
+  const shutdownPromiseRef = useRef<Promise<void> | null>(null);
+  const restartPromiseRef = useRef<Promise<void> | null>(null);
+
+  const startSidecar = useCallback(() => {
+    if (startPromiseRef.current) return startPromiseRef.current;
+
+    const start = (async () => {
+      const apiToken = crypto.randomUUID();
+      const isWindows = navigator.userAgent.toLowerCase().includes("windows");
+      const ffmpegName = isWindows ? "bin/ffmpeg.exe" : "bin/ffmpeg";
+      const [dataDir, catalogPath, ffmpegPath] = await Promise.all([
+        appDataDir(),
+        resolveResource("bin/Voice.json"),
+        resolveResource(ffmpegName),
+      ]);
+
+      console.log("Starting sidecar with:", { dataDir, catalogPath, ffmpegPath });
+
+      const sidecar = Command.sidecar("bin/melody-api", [], {
+        env: {
+          PYTHONUNBUFFERED: "1",
+          APP_ENV: "production",
+          API_HOST: "127.0.0.1",
+          API_PORT: "0",
+          MELODY_API_TOKEN: apiToken,
+          MELODY_DATA_DIR: dataDir,
+          MELODY_CATALOG_PATH: catalogPath,
+          FFMPEG_BINARY_PATH: ffmpegPath,
+        },
+      });
+
+      let resolveReady: (() => void) | undefined;
+      let didResolve = false;
+      const readyPromise = new Promise<void>((resolve) => {
+        resolveReady = resolve;
+      });
+
+      const probeHealth = async (url: string) => {
+        try {
+          const response = await fetch(`${url}/api/v1/health/live`, { method: "GET" });
+          if (response.ok && mountedRef.current && !didResolve) {
+            didResolve = true;
+            console.log(`Successfully connected to API at ${url}`);
+            setApiConnection(url, apiToken);
+            setIsReady(true);
+            resolveReady?.();
+            return true;
+          }
+        } catch {
+          // The sidecar may log its address before it is ready to accept requests.
+        }
+        return false;
+      };
+
+      const handleOutput = (line: string, source: "STDOUT" | "STDERR") => {
+        console.log(`[API ${source}]:`, line);
+        const match =
+          line.match(/(?:https?:\/\/)?(?:127\.0\.0\.1|localhost|0\.0\.0\.0):(\d+)/) ??
+          line.match(/port\s+(\d+)/i);
+        const port = match?.[1];
+        if (port && port !== "0" && mountedRef.current) {
+          console.log(`Resolved local API port from ${source}: ${port}`);
+          void probeHealth(`http://127.0.0.1:${port}`);
+        }
+      };
+
+      sidecar.stdout.on("data", (line) => handleOutput(line, "STDOUT"));
+      sidecar.stderr.on("data", (line) => handleOutput(line, "STDERR"));
+
+      const process = await sidecar.spawn();
+      if (!mountedRef.current) {
+        await process.kill();
+        throw new Error("Sidecar provider unmounted during startup");
+      }
+      sidecarProcessRef.current = process;
+
+      return readyPromise;
+    })();
+    startPromiseRef.current = start.finally(() => {
+      startPromiseRef.current = null;
+    });
+    return startPromiseRef.current;
+  }, []);
+
+  const shutdownSidecar = useCallback(async () => {
+    if (!hasTauriRuntime()) return;
+    if (shutdownPromiseRef.current) return shutdownPromiseRef.current;
+
+    const process = sidecarProcessRef.current;
+    sidecarProcessRef.current = null;
+    const shutdown = process ? process.kill() : Promise.resolve();
+    shutdownPromiseRef.current = shutdown.finally(() => {
+      shutdownPromiseRef.current = null;
+    });
+    return shutdownPromiseRef.current;
+  }, []);
+
+  const restartSidecar = useCallback(async () => {
+    if (!hasTauriRuntime()) return;
+    if (restartPromiseRef.current) return restartPromiseRef.current;
+
+    setError(null);
+    const restart = (async () => {
+      await shutdownSidecar();
+      await startSidecar();
+    })();
+    restartPromiseRef.current = restart.finally(() => {
+      restartPromiseRef.current = null;
+    });
+    return restartPromiseRef.current;
+  }, [shutdownSidecar, startSidecar]);
 
   useEffect(() => {
-    // Check if we are running in Tauri
-    // @ts-ignore
-    if (!window.__TAURI_INTERNALS__) {
-      setIsReady(true); // Web mode (development)
-      return;
+    mountedRef.current = true;
+    const desktop = hasTauriRuntime();
+    setIsDesktop(desktop);
+
+    if (!desktop) {
+      setIsReady(true);
+      return () => {
+        mountedRef.current = false;
+      };
     }
 
-    let sidecarProcess: any = null;
-    let isMounted = true;
-    let pollTimer: any = null;
-
-    async function probeHealth(url: string) {
-      try {
-        const res = await fetch(`${url}/api/v1/health`, { method: "GET" });
-        if (res.ok && isMounted) {
-          console.log(`Successfully connected to API at ${url}`);
-          setApiBaseUrl(url);
-          setIsReady(true);
-          return true;
-        }
-      } catch (e) {
-        // Not reachable yet
+    void startSidecar().catch((reason: unknown) => {
+      console.error("Failed to bootstrap Tauri sidecar", reason);
+      if (mountedRef.current) {
+        setError(String(reason));
       }
-      return false;
-    }
-
-    async function bootstrap() {
-      // First check existing backend on port 8000
-      if (await probeHealth("http://localhost:8000")) return;
-
-      // Start periodic health probe on 8000
-      pollTimer = setInterval(() => {
-        probeHealth("http://localhost:8000");
-      }, 1000);
-
-      try {
-        const dataDir = await appDataDir();
-        const catalogPath = await resolveResource("bin/Voice.json");
-        
-        // Determine ffmpeg binary name based on OS
-        const isWindows = navigator.userAgent.toLowerCase().includes("windows");
-        const ffmpegName = isWindows ? "bin/ffmpeg.exe" : "bin/ffmpeg";
-        const ffmpegPath = await resolveResource(ffmpegName);
-        
-        // Let Python pick a random free port
-        const apiPort = "0";
-
-        console.log("Starting sidecar with:", { dataDir, catalogPath, ffmpegPath });
-
-        const sidecar = Command.sidecar("bin/melody-api", [], {
-          env: {
-            PYTHONUNBUFFERED: "1",
-            API_PORT: apiPort,
-            MELODY_DATA_DIR: dataDir,
-            MELODY_CATALOG_PATH: catalogPath,
-            FFMPEG_BINARY_PATH: ffmpegPath,
-          }
-        });
-
-        const handleOutput = (line: string, source: "STDOUT" | "STDERR") => {
-          console.log(`[API ${source}]:`, line);
-          const match = line.match(/(?:http:\/\/|0\.0\.0\.0:|127\.0\.0\.1:)(\d+)/) || line.match(/port\s+(\d+)/i);
-          if (match && isMounted) {
-            const port = match[1];
-            if (port && port !== "0") {
-              const url = `http://127.0.0.1:${port}`;
-              console.log(`Resolved local API port from ${source}: ${port}`);
-              probeHealth(url);
-            }
-          }
-        };
-
-        sidecar.stdout.on('data', (line) => handleOutput(line, "STDOUT"));
-        sidecar.stderr.on('data', (line) => handleOutput(line, "STDERR"));
-
-        sidecarProcess = await sidecar.spawn();
-      } catch (err: any) {
-        console.error("Failed to bootstrap Tauri sidecar", err);
-        const fallbackOk = await probeHealth("http://localhost:8000");
-        if (!fallbackOk && isMounted) {
-          setError(err.toString());
-        }
-      }
-    }
-
-    bootstrap();
+    });
 
     return () => {
-      isMounted = false;
-      if (pollTimer) clearInterval(pollTimer);
-      if (sidecarProcess) {
-        sidecarProcess.kill();
-      }
+      mountedRef.current = false;
+      const process = sidecarProcessRef.current;
+      sidecarProcessRef.current = null;
+      if (process) void process.kill();
     };
-  }, []);
+  }, [startSidecar]);
+
+  const contextValue = useMemo(
+    () => ({ isDesktop, isReady, shutdownSidecar, restartSidecar }),
+    [isDesktop, isReady, restartSidecar, shutdownSidecar],
+  );
 
   if (error) {
     return (
-      <div className="flex h-screen items-center justify-center p-8 text-destructive text-center flex-col gap-4">
+      <div className="flex h-screen flex-col items-center justify-center gap-4 p-8 text-center text-destructive">
         <h2 className="text-xl font-bold">Failed to start local API</h2>
         <p className="font-mono text-sm">{error}</p>
       </div>
@@ -118,12 +200,12 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
 
   if (!isReady) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background flex-col gap-4">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
-        <p className="text-muted-foreground text-sm font-medium">Starting local environment...</p>
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-background">
+        <Loader2 className="h-10 w-10 text-primary motion-safe:animate-spin" />
+        <p className="text-sm font-medium text-muted-foreground">Starting local environment...</p>
       </div>
     );
   }
 
-  return <>{children}</>;
+  return <TauriContext.Provider value={contextValue}>{children}</TauriContext.Provider>;
 }

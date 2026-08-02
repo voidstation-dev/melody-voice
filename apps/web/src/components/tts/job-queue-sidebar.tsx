@@ -1,9 +1,9 @@
 "use client";
 import { useQueue } from "@/hooks/use-queue";
-import { Loader2, CheckCircle2, XCircle, Clock, Download, Play, Trash2, RotateCcw, Layers } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Clock, Play, Trash2, RotateCcw, Layers } from "lucide-react";
 import { TTSJob } from "@/types/tts-job";
-import { apiFetch, resolveApiUrl } from "@/lib/api-client";
-import { useState, useRef } from "react";
+import { apiFetchBlob } from "@/lib/api-client";
+import { useEffect, useState, useRef } from "react";
 
 export function JobQueueSidebar() {
   const { queue, activeJobs, completedJobs } = useQueue();
@@ -60,15 +60,49 @@ function JobItem({ job }: { job: TTSJob }) {
   const [playing, setPlaying] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [downloadingFormat, setDownloadingFormat] = useState<"mp3" | "m4a" | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioBlobUrlRef = useRef<string | null>(null);
 
-  const togglePlay = () => {
+  useEffect(() => {
+    return () => {
+      if (audioBlobUrlRef.current) URL.revokeObjectURL(audioBlobUrlRef.current);
+    };
+  }, [job.audioUrl]);
+
+  const togglePlay = async () => {
     if (playing) {
       audioRef.current?.pause();
-    } else {
-      audioRef.current?.play();
+      return;
     }
-    setPlaying(!playing);
+    if (!audioRef.current || !job.audioUrl) return;
+    if (!audioBlobUrlRef.current) {
+      const blob = await apiFetchBlob(job.audioUrl);
+      const objectUrl = URL.createObjectURL(blob);
+      if (!audioRef.current) {
+        URL.revokeObjectURL(objectUrl);
+        return;
+      }
+      audioBlobUrlRef.current = objectUrl;
+      audioRef.current.src = objectUrl;
+    }
+    await audioRef.current.play();
+  };
+
+  const handleDownload = async (format: "mp3" | "m4a") => {
+    if (!job.downloadUrl) return;
+    setDownloadingFormat(format);
+    try {
+      const blob = await apiFetchBlob(`${job.downloadUrl}?format=${format}`);
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = `melody-${job.id}.${format}`;
+      anchor.click();
+      URL.revokeObjectURL(objectUrl);
+    } finally {
+      setDownloadingFormat(null);
+    }
   };
 
   const handleDelete = async () => {
@@ -182,27 +216,26 @@ function JobItem({ job }: { job: TTSJob }) {
           </button>
           
           <div className="flex-none flex items-center gap-1.5">
-            <a 
-              href={job.downloadUrl ? resolveApiUrl(`${job.downloadUrl}?format=mp3`) : ""} 
-              download
+            <button
+              onClick={() => handleDownload("mp3")}
+              disabled={downloadingFormat !== null}
               className="flex items-center justify-center px-2.5 py-2 rounded-lg border border-border hover:bg-muted text-[10px] font-bold text-muted-foreground hover:text-foreground transition-colors"
               title="Download MP3"
             >
-              MP3
-            </a>
-            <a 
-              href={job.downloadUrl ? resolveApiUrl(`${job.downloadUrl}?format=m4a`) : ""} 
-              download
+              {downloadingFormat === "mp3" ? <Loader2 className="h-3 w-3 animate-spin" /> : "MP3"}
+            </button>
+            <button
+              onClick={() => handleDownload("m4a")}
+              disabled={downloadingFormat !== null}
               className="flex items-center justify-center px-2.5 py-2 rounded-lg border border-border hover:bg-muted text-[10px] font-bold text-muted-foreground hover:text-foreground transition-colors"
               title="Download M4A"
             >
-              M4A
-            </a>
+              {downloadingFormat === "m4a" ? <Loader2 className="h-3 w-3 animate-spin" /> : "M4A"}
+            </button>
           </div>
           
           <audio 
             ref={audioRef} 
-            src={resolveApiUrl(job.audioUrl)} 
             onEnded={() => setPlaying(false)} 
             onPause={() => setPlaying(false)}
             onPlay={() => setPlaying(true)}

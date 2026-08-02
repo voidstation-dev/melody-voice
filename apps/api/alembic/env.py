@@ -11,7 +11,10 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-if config.config_file_name is not None:
+if (
+    config.config_file_name is not None
+    and config.attributes.get("configure_logger", True)
+):
     fileConfig(config.config_file_name)
 
 import sys
@@ -21,7 +24,14 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from app.database import Base
+from app.config import settings
 from app.models.tts_job import TTSJobModel # ensure models are loaded
+
+runtime_database_url = config.attributes.get(
+    "database_url",
+    settings.database_url.replace("+aiosqlite", ""),
+)
+config.set_main_option("sqlalchemy.url", runtime_database_url)
 
 # add your model's MetaData object here
 # for 'autogenerate' support

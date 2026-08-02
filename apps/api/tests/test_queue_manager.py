@@ -1,0 +1,124 @@
+import pytest
+import asyncio
+from unittest.mock import AsyncMock
+
+from app.workers.queue_manager import TTSQueueManager
+
+
+@pytest.mark.asyncio
+async def test_queue_manager_starts_only_configured_worker_count():
+    manager = TTSQueueManager(concurrency=2)
+
+    await manager.start()
+    try:
+        assert len(manager.workers) == 2
+        assert all(not worker.done() for worker in manager.workers)
+    finally:
+        await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_delayed_enqueue_does_not_block_caller():
+    manager = TTSQueueManager(concurrency=1)
+    manager.accepting_jobs = True
+    started_at = asyncio.get_running_loop().time()
+
+    await manager.enqueue_after("job-1", delay_seconds=0.05)
+
+    assert asyncio.get_running_loop().time() - started_at < 0.02
+    assert manager.queue.empty()
+    await asyncio.sleep(0.06)
+    assert await manager.queue.get() == "job-1"
+    manager.queue.task_done()
+
+
+@pytest.mark.asyncio
+async def test_duplicate_enqueue_is_ignored():
+    manager = TTSQueueManager(concurrency=1)
+    manager.accepting_jobs = True
+
+    results = await asyncio.gather(
+        manager.enqueue("job-1"),
+        manager.enqueue("job-1"),
+        manager.enqueue("job-1"),
+    )
+
+    assert results.count(True) == 1
+    assert results.count(False) == 2
+    assert manager.queue.qsize() == 1
+
+
+@pytest.mark.asyncio
+async def test_each_queue_worker_owns_one_provider(monkeypatch):
+    providers: list[object] = []
+
+    def provider_factory():
+        provider = object()
+        providers.append(provider)
+        return provider
+
+    execute = AsyncMock()
+    monkeypatch.setattr("app.workers.queue_manager.execute_tts_job_step", execute)
+    manager = TTSQueueManager(concurrency=2, provider_factory=provider_factory)
+
+    await manager.start()
+    try:
+        await manager.enqueue("job-1")
+        await manager.enqueue("job-2")
+        await asyncio.wait_for(manager.queue.join(), timeout=1)
+    finally:
+        await manager.stop()
+
+    assert len(providers) == 2
+    used_providers = {call.kwargs["provider"] for call in execute.await_args_list}
+    assert used_providers
+    assert used_providers.issubset(set(providers))
+
+
+@pytest.mark.asyncio
+async def test_shutdown_requeues_interrupted_processing_job(monkeypatch):
+    started = asyncio.Event()
+
+    async def never_finishes(*args, **kwargs):
+        started.set()
+        await asyncio.Event().wait()
+
+    requeue = AsyncMock()
+    monkeypatch.setattr(
+        "app.workers.queue_manager.execute_tts_job_step",
+        never_finishes,
+    )
+    monkeypatch.setattr(
+        "app.workers.queue_manager.requeue_interrupted_job",
+        requeue,
+        raising=False,
+    )
+    manager = TTSQueueManager(
+        concurrency=1,
+        provider_factory=object,
+        shutdown_grace_seconds=0.01,
+    )
+
+    await manager.start()
+    await manager.enqueue("job-1")
+    await asyncio.wait_for(started.wait(), timeout=1)
+    await manager.stop()
+
+    requeue.assert_awaited_once_with("job-1")
+    assert manager.accepting_jobs is False
+
+
+@pytest.mark.asyncio
+async def test_queue_health_snapshot_reports_workers_and_depth():
+    manager = TTSQueueManager(concurrency=2, provider_factory=object)
+    await manager.start()
+    try:
+        await manager.enqueue("job-1")
+        snapshot = manager.health_snapshot()
+        assert snapshot["accepting_jobs"] is True
+        assert snapshot["worker_count"] == 2
+        assert snapshot["workers_alive"] == 2
+        assert snapshot["queue_depth"] in {0, 1}
+        assert snapshot["circuit_breaker"]["state"] == "closed"
+    finally:
+        await manager.stop()

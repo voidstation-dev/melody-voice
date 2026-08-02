@@ -1,17 +1,24 @@
 import uuid
+import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_async_session
 from app.models.tts_job import TTSJobModel
-from app.providers.capcut_provider import CapCutProvider
 from app.schemas.tts import CreateTTSJobRequest, TTSJobListResponse, TTSJobResponse, BatchJobCreateResponse
-from app.services.tts_service import create_tts_job, get_job_by_id, list_jobs
+from app.services.tts_service import (
+    create_tts_job,
+    create_tts_job_with_batch_limits,
+    get_job_by_id,
+    list_jobs,
+)
 from app.workers.tts_worker import execute_tts_job_step
 from app.utils.text_utils import split_text_into_chunks, slugify_vietnamese
+from app.services.voice_catalog import voice_catalog
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 def serialize_job(job: TTSJobModel) -> TTSJobResponse:
     text_prev = job.text[:80] + "..." if len(job.text) > 80 else job.text
@@ -47,9 +54,10 @@ async def create_job_endpoint(
     req: CreateTTSJobRequest,
     session: AsyncSession = Depends(get_async_session),
 ):
-    provider = CapCutProvider(catalog_path=settings.capcut_catalog_path)
-    voices = provider.list_voices()
-    matched = next((v for v in voices if v.voice_type == req.voiceType), None)
+    if len(req.text) > settings.tts_max_text_chars:
+        raise HTTPException(status_code=422, detail="TEXT_TOO_LONG")
+
+    matched = voice_catalog.get_voice(req.voiceType)
     
     if not matched:
         raise HTTPException(status_code=422, detail="VOICE_NOT_FOUND: Selected voice type does not exist in catalog")
@@ -60,19 +68,29 @@ async def create_job_endpoint(
     batch_id = req.batchId if req.batchId else str(uuid.uuid4())
     batch_position = req.batchPosition if req.batchPosition is not None else 0
     
-    job = await create_tts_job(
-        session,
-        text=req.text,
-        voice_type=req.voiceType,
-        voice_display_name=matched.display_name,
-        language_code=matched.language_code,
-        resource_id=matched.resource_id,
-        rate=req.rate,
-        batch_id=batch_id,
-        batch_position=batch_position,
-        source_file_name=req.sourceFileName,
-        source_file_size=req.sourceFileSize,
+    create_job = (
+        create_tts_job_with_batch_limits
+        if req.batchId
+        else create_tts_job
     )
+    create_kwargs = {
+        "text": req.text,
+        "voice_type": req.voiceType,
+        "voice_display_name": matched.display_name,
+        "language_code": matched.language_code,
+        "resource_id": matched.resource_id,
+        "rate": req.rate,
+        "batch_id": batch_id,
+        "batch_position": batch_position,
+        "source_file_name": req.sourceFileName,
+        "source_file_size": req.sourceFileSize,
+    }
+    if req.batchId:
+        create_kwargs.update(
+            max_files=settings.tts_max_batch_files,
+            max_total_chars=settings.tts_max_batch_total_chars,
+        )
+    job = await create_job(session, **create_kwargs)
     
     await queue_manager.enqueue(job.id)
 
@@ -181,8 +199,11 @@ async def delete_job_endpoint(job_id: str, session: AsyncSession = Depends(get_a
             m4a_path = job.audio_path.replace(".mp3", ".m4a")
             if os.path.exists(m4a_path):
                 os.remove(m4a_path)
-        except Exception as e:
-            print(f"Error deleting audio files: {e}")
+        except Exception:
+            logger.exception(
+                "Failed deleting audio files",
+                extra={"job_id": job.id},
+            )
 
     await session.delete(job)
     await session.commit()
@@ -197,17 +218,28 @@ async def retry_job_endpoint(job_id: str, session: AsyncSession = Depends(get_as
     if job.status not in ["failed", "completed"]:
         raise HTTPException(status_code=400, detail="Only failed or completed jobs can be retried")
         
-    # Reset job state
-    job.status = "queued"
-    job.progress = 0
-    job.error_code = None
-    job.error_message = None
-    job.audio_path = None
-    job.audio_file_size = None
-    job.started_at = None
-    job.completed_at = None
+    retry_kwargs = {
+        "text": job.text,
+        "voice_type": job.voice_type,
+        "voice_display_name": job.voice_display_name,
+        "language_code": job.language_code,
+        "resource_id": job.resource_id,
+        "rate": job.rate,
+        "kind": job.kind,
+        "batch_id": job.batch_id,
+        "batch_position": job.batch_position,
+        "source_file_name": job.source_file_name,
+        "source_file_size": job.source_file_size,
+    }
+    if job.batch_id:
+        retried_job = await create_tts_job_with_batch_limits(
+            session,
+            **retry_kwargs,
+            max_files=settings.tts_max_batch_files,
+            max_total_chars=settings.tts_max_batch_total_chars,
+        )
+    else:
+        retried_job = await create_tts_job(session, **retry_kwargs)
+    await queue_manager.enqueue(retried_job.id)
     
-    await session.commit()
-    await queue_manager.enqueue(job.id)
-    
-    return serialize_job(job)
+    return serialize_job(retried_job)

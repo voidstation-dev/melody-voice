@@ -1,141 +1,359 @@
 import asyncio
-import json
+import logging
 import os
+import random
+import time
 from datetime import datetime, timezone
 from pathlib import Path
+
 from app.config import settings
 from app.database import AsyncSessionLocal
+from app.exceptions import TTSJobError
 from app.models.tts_job import TTSJobModel
 from app.providers.capcut_provider import CapCutProvider
 from app.services.audio_storage import download_audio
-
+from app.services.audio_storage import validate_audio_file
+from app.services.audio_cleanup import cleanup_job_artifacts
+from app.services.chunk_executor import (
+    ChunkLimitExceeded,
+    ChunkResult,
+    JobSnapshot,
+    ensure_chunk_limit,
+    execute_chunks_bounded,
+)
+from app.services.progress_reporter import ProgressReporter
+from app.services.retry_policy import (
+    calculate_retry_delay,
+    map_download_error,
+    map_provider_error,
+)
 from app.utils.text_utils import split_text_into_chunks
+from app.services.tts_service import claim_job
+from app.services.raw_response_storage import save_failed_provider_response
 
-async def execute_tts_job_step(job_id: str) -> None:
-    # Use an independent session for the background task
+
+logger = logging.getLogger(__name__)
+
+
+async def process_chunk(
+    *,
+    index: int,
+    text: str,
+    provider: CapCutProvider,
+    job: JobSnapshot,
+) -> ChunkResult:
+    try:
+        result = await asyncio.to_thread(
+            provider.synthesize,
+            text=text,
+            voice_type=job.voice_type,
+            resource_id=job.resource_id,
+            rate=job.rate,
+        )
+    except Exception as exc:
+        raise map_provider_error(exc) from exc
+
+    if not result.audio_urls:
+        raise TTSJobError(
+            code="AUDIO_URL_NOT_FOUND",
+            message=f"No playable audio URL extracted for chunk {index}",
+            retryable=False,
+        )
+
+    destination = settings.audio_storage_dir / f"{job.id}_part{index}.mp3"
+    try:
+        mime_type, size = await download_audio(
+            url=result.audio_urls[0],
+            destination=destination,
+            max_bytes=settings.tts_audio_max_bytes,
+        )
+    except Exception as exc:
+        raise map_download_error(exc) from exc
+    return ChunkResult(
+        index=index,
+        path=destination,
+        raw_response=result.raw_response,
+        mime_type=mime_type,
+        size=size,
+    )
+
+
+async def combine_audio_parts(
+    *,
+    parts: list[Path],
+    destination: Path,
+    rate: float,
+) -> None:
+    temporary = Path(f"{destination}.tmp")
+    if len(parts) == 1 and rate == 1.0:
+        try:
+            parts[0].replace(temporary)
+            validate_audio_file(temporary, mime_type="audio/mpeg")
+            temporary.replace(destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return
+
+    list_file = destination.with_name(f"{destination.stem}_list.txt")
+    with list_file.open("w", encoding="utf-8") as output:
+        for part in parts:
+            output.write(f"file '{part.absolute()}'\n")
+
+    ffmpeg_binary = os.environ.get("FFMPEG_BINARY_PATH", "ffmpeg")
+    command = [
+        ffmpeg_binary,
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(list_file.absolute()),
+    ]
+    if rate != 1.0:
+        command.extend(["-filter:a", f"atempo={rate}", "-q:a", "2"])
+    else:
+        command.extend(["-c", "copy"])
+    command.extend(["-f", "mp3", str(temporary.absolute())])
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await process.communicate()
+        if process.returncode != 0:
+            raise TTSJobError(
+                code="FFMPEG_FAILED",
+                message=(
+                    "FFmpeg processing failed: "
+                    + stderr.decode("utf-8", errors="ignore")
+                ),
+                retryable=False,
+            )
+        validate_audio_file(temporary, mime_type="audio/mpeg")
+        temporary.replace(destination)
+    finally:
+        list_file.unlink(missing_ok=True)
+        temporary.unlink(missing_ok=True)
+
+
+async def execute_tts_job_step(
+    job_id: str,
+    *,
+    provider: CapCutProvider | None = None,
+    worker_id: int = 0,
+) -> None:
+    started_monotonic = time.monotonic()
     async with AsyncSessionLocal() as session:
+        if not await claim_job(session, job_id):
+            return
         job = await session.get(TTSJobModel, job_id)
-        if not job or job.status != "queued" or job.cancel_requested:
+        if not job:
             return
 
-        job.status = "processing"
-        job.progress = 0
-        job.started_at = datetime.now(timezone.utc)
-        await session.commit()
+        active_provider = provider or CapCutProvider(
+            catalog_path=settings.capcut_catalog_path
+        )
+        downloaded_files: list[Path] = []
+        final_destination = settings.audio_storage_dir / f"{job.id}.mp3"
+        raw_responses: list[dict | None] = []
 
-        provider = CapCutProvider(catalog_path=settings.capcut_catalog_path)
-        
+        logger.info(
+            "TTS job started",
+            extra={
+                "job_id": job.id,
+                "batch_id": job.batch_id,
+                "worker_id": worker_id,
+                "attempt": job.attempt_count,
+                "voice_type": job.voice_type,
+                "text_length": len(job.text),
+                "status": "processing",
+            },
+        )
+
         try:
-            chunks = split_text_into_chunks(job.text)
-            if not chunks:
-                chunks = [""]
+            chunks = split_text_into_chunks(job.text) or [""]
+            ensure_chunk_limit(
+                chunks,
+                max_chunks=settings.tts_max_chunks_per_job,
+            )
 
-            total_chunks = len(chunks)
-            downloaded_files: list[Path | None] = [None] * total_chunks
-            raw_responses: list[dict | None] = [None] * total_chunks
-            
-            semaphore = asyncio.Semaphore(3)
+            snapshot = JobSnapshot(
+                id=job.id,
+                voice_type=job.voice_type,
+                resource_id=job.resource_id,
+                rate=(
+                    1.0
+                    if settings.tts_apply_rate_with_ffmpeg
+                    else job.rate
+                ),
+            )
+            raw_responses = [None] * len(chunks)
+            progress_reporter = ProgressReporter(
+                commit_interval_seconds=(
+                    settings.tts_progress_commit_interval_seconds
+                ),
+                commit_step_percent=settings.tts_progress_commit_step_percent,
+            )
 
-            async def process_chunk(idx: int, chunk_text: str):
-                async with semaphore:
-                    result = await asyncio.to_thread(
-                        provider.synthesize,
-                        text=chunk_text,
-                        voice_type=job.voice_type,
-                        resource_id=job.resource_id,
-                        rate=job.rate,
-                    )
-                    raw_responses[idx] = result.raw_response
+            async def run_chunk(*, index: int, text: str) -> ChunkResult:
+                return await process_chunk(
+                    index=index,
+                    text=text,
+                    provider=active_provider,
+                    job=snapshot,
+                )
 
-                    if not result.audio_urls:
-                        raise ValueError(f"AUDIO_URL_NOT_FOUND: No playable audio URL extracted from provider for chunk {idx}")
-
-                    part_dest = settings.audio_storage_dir / f"{job_id}_part{idx}.mp3"
-                    mime, size = await download_audio(url=result.audio_urls[0], destination=part_dest)
-                    downloaded_files[idx] = part_dest
-                    
-                    completed_count = sum(1 for f in downloaded_files if f is not None)
-                    job.progress = int((completed_count / total_chunks) * 90)
+            completed = 0
+            async for result in execute_chunks_bounded(
+                chunks,
+                concurrency=settings.tts_chunk_concurrency,
+                process_chunk=run_chunk,
+            ):
+                downloaded_files.append(result.path)
+                raw_responses[result.index] = result.raw_response
+                completed += 1
+                if progress_reporter.should_commit(
+                    completed=completed,
+                    total=len(chunks),
+                ):
+                    job.progress = int((completed / len(chunks)) * 90)
                     await session.commit()
 
-            await asyncio.gather(*(process_chunk(i, c) for i, c in enumerate(chunks)))
-            valid_downloaded_files: list[Path] = [f for f in downloaded_files if f is not None]
+            downloaded_files.sort(
+                key=lambda path: int(path.stem.rsplit("part", 1)[1])
+            )
+            await combine_audio_parts(
+                parts=downloaded_files,
+                destination=final_destination,
+                rate=(
+                    job.rate
+                    if settings.tts_apply_rate_with_ffmpeg
+                    else 1.0
+                ),
+            )
+            for part in downloaded_files:
+                part.unlink(missing_ok=True)
 
-            if settings.save_raw_provider_responses:
-                settings.raw_response_dir.mkdir(parents=True, exist_ok=True)
-                raw_file = settings.raw_response_dir / f"{job_id}.json"
-                raw_file.write_text(json.dumps(raw_responses, indent=2))
-                job.raw_response_path = str(raw_file)
+            final_size = validate_audio_file(
+                final_destination,
+                mime_type="audio/mpeg",
+            )
 
-            final_dest = settings.audio_storage_dir / f"{job_id}.mp3"
-
-            needs_ffmpeg = len(valid_downloaded_files) > 1 or job.rate != 1.0
-
-            if not needs_ffmpeg:
-                valid_downloaded_files[0].rename(final_dest)
-            else:
-                list_file = settings.audio_storage_dir / f"{job_id}_list.txt"
-                with list_file.open("w", encoding="utf-8") as f:
-                    for pf in valid_downloaded_files:
-                        f.write(f"file '{pf.absolute()}'\n")
-                
-                ffmpeg_cmd = os.environ.get("FFMPEG_BINARY_PATH", "ffmpeg")
-                cmd = [
-                    ffmpeg_cmd, "-y", "-f", "concat", "-safe", "0",
-                    "-i", str(list_file.absolute())
-                ]
-                
-                if job.rate != 1.0:
-                    cmd.extend(["-filter:a", f"atempo={job.rate}", "-q:a", "2"])
-                else:
-                    cmd.extend(["-c", "copy"])
-                
-                cmd.append(str(final_dest.absolute()))
-                
-                proc = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-                out, err = await proc.communicate()
-                if proc.returncode != 0:
-                    raise RuntimeError(f"FFmpeg processing failed: {err.decode('utf-8', errors='ignore')}")
-                    
-                list_file.unlink(missing_ok=True)
-                for pf in valid_downloaded_files:
-                    pf.unlink(missing_ok=True)
-
-            final_size = final_dest.stat().st_size
             job.status = "completed"
-            job.audio_path = str(final_dest)
+            job.audio_path = str(final_destination)
             job.audio_mime_type = "audio/mpeg"
             job.audio_file_size = final_size
             job.progress = 100
             job.completed_at = datetime.now(timezone.utc)
+            logger.info(
+                "TTS job completed",
+                extra={
+                    "job_id": job.id,
+                    "batch_id": job.batch_id,
+                    "worker_id": worker_id,
+                    "attempt": job.attempt_count,
+                    "chunk_count": len(chunks),
+                    "voice_type": job.voice_type,
+                    "text_length": len(job.text),
+                    "status": "completed",
+                    "duration_ms": int(
+                        (time.monotonic() - started_monotonic) * 1000
+                    ),
+                },
+            )
 
         except Exception as exc:
-            import traceback
-            traceback.print_exc()
-            
-            if job.attempt_count < 5:
-                job.attempt_count += 1
+            if isinstance(exc, ChunkLimitExceeded):
+                error = TTSJobError(
+                    code="TOO_MANY_CHUNKS",
+                    message=str(exc),
+                    retryable=False,
+                )
+            elif isinstance(exc, TTSJobError):
+                error = exc
+            else:
+                error = TTSJobError(
+                    code="INTERNAL_ERROR",
+                    message=str(exc),
+                    retryable=False,
+                )
+
+            if (
+                error.retryable
+                and job.attempt_count <= settings.tts_max_auto_retries
+            ):
                 job.status = "queued"
                 job.progress = 0
                 job.started_at = None
                 job.error_code = None
                 job.error_message = None
                 await session.commit()
-                
-                # Small delay to avoid immediate rate limit hit
-                await asyncio.sleep(2)
-                
-                # Local import to avoid circular dependency
                 from app.workers.queue_manager import queue_manager
-                await queue_manager.enqueue(job.id)
+
+                delay = calculate_retry_delay(
+                    attempt=job.attempt_count - 1,
+                    base_delay_seconds=settings.tts_retry_base_delay_seconds,
+                    retry_after_seconds=error.retry_after_seconds,
+                    jitter=random.uniform(0, 1),
+                )
+                await queue_manager.enqueue_after(
+                    job.id,
+                    delay_seconds=delay,
+                )
+                logger.warning(
+                    "TTS job scheduled for retry",
+                    extra={
+                        "job_id": job.id,
+                        "batch_id": job.batch_id,
+                        "worker_id": worker_id,
+                        "attempt": job.attempt_count,
+                        "voice_type": job.voice_type,
+                        "text_length": len(job.text),
+                        "status": "queued",
+                        "duration_ms": int(
+                            (time.monotonic() - started_monotonic) * 1000
+                        ),
+                        "error_code": error.code,
+                    },
+                )
                 return
-                
+
             job.status = "failed"
-            job.error_code = "PROVIDER_UNAVAILABLE" if "Provider" in str(exc) else "INTERNAL_ERROR"
-            job.error_message = str(exc)
-        
+            job.error_code = error.code
+            job.error_message = error.message
+            if settings.save_raw_provider_responses and any(raw_responses):
+                raw_path = save_failed_provider_response(
+                    job_id=job.id,
+                    payload=raw_responses,
+                    directory=settings.raw_response_dir,
+                )
+                job.raw_response_path = str(raw_path)
+            logger.error(
+                "TTS job failed",
+                extra={
+                    "job_id": job.id,
+                    "batch_id": job.batch_id,
+                    "worker_id": worker_id,
+                    "attempt": job.attempt_count,
+                    "voice_type": job.voice_type,
+                    "text_length": len(job.text),
+                    "status": "failed",
+                    "duration_ms": int(
+                        (time.monotonic() - started_monotonic) * 1000
+                    ),
+                    "error_code": error.code,
+                },
+            )
+
+        finally:
+            cleanup_job_artifacts(
+                job.id,
+                audio_dir=settings.audio_storage_dir,
+            )
+            if job.status != "completed":
+                final_destination.unlink(missing_ok=True)
+
         await session.commit()

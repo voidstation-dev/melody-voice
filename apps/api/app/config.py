@@ -10,20 +10,36 @@ _catalog_path = Path(os.environ.get("MELODY_CATALOG_PATH", "../../vendor/capcut-
 
 class Settings(BaseSettings):
     app_env: str = "development"
-    api_host: str = "0.0.0.0"
+    api_host: str = "127.0.0.1"
     api_port: int = int(os.environ.get("API_PORT", 8000))
+    melody_api_token: str | None = None
     cors_origins: list[str] = ["*"] # Allow electron origins like file:// or app://
     database_url: str = f"sqlite+aiosqlite:///{_data_dir}/app.db"
     audio_storage_dir: Path = _data_dir / "audio"
     preview_storage_dir: Path = _data_dir / "previews"
     raw_response_dir: Path = _data_dir / "raw-responses"
     capcut_catalog_path: Path = _catalog_path
-    tts_max_text_chars: int = 500000
+    tts_queue_concurrency: int = 2
+    tts_chunk_concurrency: int = 1
+    tts_max_text_chars: int = 50000
+    tts_max_chunks_per_job: int = 120
+    tts_max_batch_files: int = 50
+    tts_max_batch_total_chars: int = 500000
     tts_min_rate: float = 0.5
     tts_max_rate: float = 2.0
     tts_provider_timeout_seconds: float = 90.0
+    tts_max_auto_retries: int = 2
+    tts_retry_base_delay_seconds: float = 2.0
+    tts_apply_rate_with_ffmpeg: bool = False
+    tts_circuit_breaker_failure_threshold: int = 5
+    tts_circuit_breaker_window_seconds: float = 60.0
+    tts_circuit_breaker_cooldown_seconds: float = 30.0
     tts_audio_max_bytes: int = 52428800
-    save_raw_provider_responses: bool = True
+    tts_progress_commit_interval_seconds: float = 1.0
+    tts_progress_commit_step_percent: int = 5
+    tts_queue_shutdown_grace_seconds: float = 15.0
+    save_raw_provider_responses: bool = False
+    raw_provider_response_retention_seconds: float = 604800.0
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { getRuntimeVersion } from "@/lib/runtime-version";
 import {
   Home,
   Trash2,
@@ -19,6 +21,11 @@ import {
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const [version, setVersion] = useState("dev");
+
+  useEffect(() => {
+    getRuntimeVersion().then(setVersion).catch(() => setVersion("dev"));
+  }, []);
 
   const navItem = (
     href: string,
@@ -63,7 +70,7 @@ export function AppSidebar() {
             Created by VoidStation
           </p>
           <p className="text-[10px] text-muted-foreground/60">
-            v1.0.0
+            v{version}
           </p>
         </div>
       </div>

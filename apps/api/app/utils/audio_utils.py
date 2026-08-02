@@ -1,32 +1,64 @@
 import asyncio
 import os
-import tempfile
 from pathlib import Path
-import subprocess
+
+from app.exceptions import TTSJobError
+from app.services.audio_storage import validate_audio_file
+
+
+_conversion_locks: dict[str, asyncio.Lock] = {}
+
+
+def _conversion_lock(output_path: Path) -> asyncio.Lock:
+    key = str(output_path.resolve())
+    lock = _conversion_locks.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _conversion_locks[key] = lock
+    return lock
+
 
 async def convert_mp3_to_m4a(input_path: str, output_path: str) -> None:
-    if os.path.exists(output_path):
-        return
+    output = Path(output_path)
+    temporary = Path(f"{output_path}.tmp")
+    async with _conversion_lock(output):
+        if output.exists():
+            validate_audio_file(output, mime_type="audio/mp4")
+            return
 
-    ffmpeg_cmd = os.environ.get("FFMPEG_BINARY_PATH", "ffmpeg")
-    # Run ffmpeg asynchronously
-    cmd = [
-        ffmpeg_cmd,
-        "-y",
-        "-i", input_path,
-        "-c:a", "aac",
-        "-b:a", "192k",
-        "-vn",
-        output_path
-    ]
-    
-    process = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
-    )
-    
-    stdout, stderr = await process.communicate()
-    
-    if process.returncode != 0:
-        raise Exception(f"FFmpeg conversion failed: {stderr.decode('utf-8', errors='ignore')}")
+        ffmpeg_binary = os.environ.get("FFMPEG_BINARY_PATH", "ffmpeg")
+        command = [
+            ffmpeg_binary,
+            "-y",
+            "-i",
+            input_path,
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-vn",
+            "-f",
+            "ipod",
+            str(temporary),
+        ]
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await process.communicate()
+            if process.returncode != 0:
+                raise TTSJobError(
+                    code="FFMPEG_FAILED",
+                    message=(
+                        "FFmpeg conversion failed: "
+                        + stderr.decode("utf-8", errors="ignore")
+                    ),
+                    retryable=False,
+                )
+            validate_audio_file(temporary, mime_type="audio/mp4")
+            temporary.replace(output)
+        finally:
+            temporary.unlink(missing_ok=True)

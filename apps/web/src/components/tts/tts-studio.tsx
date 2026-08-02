@@ -10,6 +10,7 @@ import { JobQueueSidebar } from "./job-queue-sidebar";
 import { BatchImportModal } from "./batch-import-modal";
 import { ImportedTextFile, TextImportError } from "@/types/text-import";
 import { apiFetch } from "@/lib/api-client";
+import { getBatchLimitError } from "@/lib/batch-limits";
 import { TTSJob, BatchJobCreateResponse } from "@/types/tts-job";
 import { Sparkles, Loader2, Clipboard, FileUp, FolderOpen } from "lucide-react";
 import { useRef } from "react";
@@ -66,6 +67,16 @@ export function TTSStudio() {
   };
 
   const handleStartBatchJobs = async (selectedFiles: ImportedTextFile[]) => {
+    const limitError = getBatchLimitError(selectedFiles);
+    if (limitError === "BATCH_FILE_LIMIT_EXCEEDED") {
+      alert("A batch can contain at most 50 files.");
+      return;
+    }
+    if (limitError === "BATCH_TEXT_LIMIT_EXCEEDED") {
+      alert("A batch can contain at most 500,000 characters.");
+      return;
+    }
+
     const createdJobs = [];
     // Generate a single batchId for all files in this batch so they group together in the queue
     const batchId = crypto.randomUUID();

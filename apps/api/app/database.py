@@ -1,30 +1,51 @@
-from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from collections.abc import AsyncGenerator
+
+from sqlalchemy import event
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.orm import DeclarativeBase
+
 from app.config import settings
 
-engine = create_async_engine(settings.database_url, echo=False)
-AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 class Base(DeclarativeBase):
     pass
 
-async def init_database() -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        
-    from app.models.tts_job import TTSJobModel
-    from sqlalchemy import select
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(select(TTSJobModel).where(TTSJobModel.status.in_(["processing", "queued"])))
-        stuck_jobs = result.scalars().all()
-        for job in stuck_jobs:
-            job.status = "failed"
-            job.error_code = "SERVER_RESTARTED"
-            job.error_message = "Server restarted before job could complete."
-        if stuck_jobs:
-            await session.commit()
-            print(f"Cleaned up {len(stuck_jobs)} stuck jobs.")
+
+def create_database_engine(database_url: str) -> AsyncEngine:
+    database_engine = create_async_engine(
+        database_url,
+        echo=False,
+        pool_pre_ping=True,
+    )
+
+    if database_url.startswith("sqlite"):
+        @event.listens_for(database_engine.sync_engine, "connect")
+        def configure_sqlite_connection(dbapi_connection, connection_record):
+            del connection_record
+            cursor = dbapi_connection.cursor()
+            try:
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.execute("PRAGMA busy_timeout=5000")
+                cursor.execute("PRAGMA foreign_keys=ON")
+            finally:
+                cursor.close()
+
+    return database_engine
+
+
+engine = create_database_engine(settings.database_url)
+AsyncSessionLocal = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
