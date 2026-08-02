@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "VoidMelody",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.voidstation.voidmelody",
   "build": {
     "frontendDist": "../out",
@@ -28,6 +28,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "externalBin": [
       "bin/melody-api"
     ],
@@ -45,6 +46,17 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY3QzY4NjQyNEY2OUU1OTEKUldTUjVXbFBRb2JHWjFIQkFNTmNxTnlrUXJjeXdSWEl0ZENlU0VVVmpDeWpIZzV3dFJUbG1YQzcK",
+      "endpoints": [
+        "https://github.com/voidstation-dev/void-melody/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }
