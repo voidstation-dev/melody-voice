@@ -10,6 +10,7 @@ class TTSQueueManager:
         self.queue: asyncio.Queue[str] = asyncio.Queue()
         self.concurrency = concurrency
         self.workers: list[asyncio.Task] = []
+        self.delayed_tasks: set[asyncio.Task] = set()
 
     async def start(self):
         logger.info("Starting TTS Queue Manager workers...")
@@ -23,10 +24,31 @@ class TTSQueueManager:
             task.cancel()
         await asyncio.gather(*self.workers, return_exceptions=True)
         self.workers = []
+        for task in self.delayed_tasks:
+            task.cancel()
+        await asyncio.gather(*self.delayed_tasks, return_exceptions=True)
+        self.delayed_tasks.clear()
 
     async def enqueue(self, job_id: str):
         await self.queue.put(job_id)
         logger.info(f"Enqueued job {job_id}. Queue size: {self.queue.qsize()}")
+
+    async def enqueue_after(
+        self,
+        job_id: str,
+        *,
+        delay_seconds: float,
+    ) -> None:
+        async def delayed_enqueue() -> None:
+            await asyncio.sleep(delay_seconds)
+            await self.enqueue(job_id)
+
+        task = asyncio.create_task(
+            delayed_enqueue(),
+            name=f"tts-retry-{job_id}",
+        )
+        self.delayed_tasks.add(task)
+        task.add_done_callback(self.delayed_tasks.discard)
 
     async def _worker(self, worker_id: int):
         logger.info(f"Worker {worker_id} started")

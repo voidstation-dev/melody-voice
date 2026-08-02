@@ -1,11 +1,13 @@
 import asyncio
 import json
 import os
+import random
 from datetime import datetime, timezone
 from pathlib import Path
 
 from app.config import settings
 from app.database import AsyncSessionLocal
+from app.exceptions import TTSJobError
 from app.models.tts_job import TTSJobModel
 from app.providers.capcut_provider import CapCutProvider
 from app.services.audio_storage import download_audio
@@ -17,6 +19,11 @@ from app.services.chunk_executor import (
     execute_chunks_bounded,
 )
 from app.services.progress_reporter import ProgressReporter
+from app.services.retry_policy import (
+    calculate_retry_delay,
+    map_download_error,
+    map_provider_error,
+)
 from app.utils.text_utils import split_text_into_chunks
 
 
@@ -27,26 +34,33 @@ async def process_chunk(
     provider: CapCutProvider,
     job: JobSnapshot,
 ) -> ChunkResult:
-    result = await asyncio.to_thread(
-        provider.synthesize,
-        text=text,
-        voice_type=job.voice_type,
-        resource_id=job.resource_id,
-        rate=job.rate,
-    )
+    try:
+        result = await asyncio.to_thread(
+            provider.synthesize,
+            text=text,
+            voice_type=job.voice_type,
+            resource_id=job.resource_id,
+            rate=job.rate,
+        )
+    except Exception as exc:
+        raise map_provider_error(exc) from exc
 
     if not result.audio_urls:
-        raise ValueError(
-            "AUDIO_URL_NOT_FOUND: "
-            f"No playable audio URL extracted for chunk {index}"
+        raise TTSJobError(
+            code="AUDIO_URL_NOT_FOUND",
+            message=f"No playable audio URL extracted for chunk {index}",
+            retryable=False,
         )
 
     destination = settings.audio_storage_dir / f"{job.id}_part{index}.mp3"
-    mime_type, size = await download_audio(
-        url=result.audio_urls[0],
-        destination=destination,
-        max_bytes=settings.tts_audio_max_bytes,
-    )
+    try:
+        mime_type, size = await download_audio(
+            url=result.audio_urls[0],
+            destination=destination,
+            max_bytes=settings.tts_audio_max_bytes,
+        )
+    except Exception as exc:
+        raise map_download_error(exc) from exc
     return ChunkResult(
         index=index,
         path=destination,
@@ -96,9 +110,13 @@ async def combine_audio_parts(
         )
         _, stderr = await process.communicate()
         if process.returncode != 0:
-            raise RuntimeError(
-                "FFmpeg processing failed: "
-                + stderr.decode("utf-8", errors="ignore")
+            raise TTSJobError(
+                code="FFMPEG_FAILED",
+                message=(
+                    "FFmpeg processing failed: "
+                    + stderr.decode("utf-8", errors="ignore")
+                ),
+                retryable=False,
             )
     finally:
         list_file.unlink(missing_ok=True)
@@ -118,6 +136,7 @@ async def execute_tts_job_step(
 
         job.status = "processing"
         job.progress = 0
+        job.attempt_count += 1
         job.started_at = datetime.now(timezone.utc)
         await session.commit()
 
@@ -137,7 +156,11 @@ async def execute_tts_job_step(
                 id=job.id,
                 voice_type=job.voice_type,
                 resource_id=job.resource_id,
-                rate=job.rate,
+                rate=(
+                    1.0
+                    if settings.tts_apply_rate_with_ffmpeg
+                    else job.rate
+                ),
             )
             raw_responses: list[dict | None] = [None] * len(chunks)
             progress_reporter = ProgressReporter(
@@ -187,7 +210,11 @@ async def execute_tts_job_step(
             await combine_audio_parts(
                 parts=downloaded_files,
                 destination=final_destination,
-                rate=snapshot.rate,
+                rate=(
+                    job.rate
+                    if settings.tts_apply_rate_with_ffmpeg
+                    else 1.0
+                ),
             )
             for part in downloaded_files:
                 part.unlink(missing_ok=True)
@@ -199,32 +226,48 @@ async def execute_tts_job_step(
             job.progress = 100
             job.completed_at = datetime.now(timezone.utc)
 
-        except ChunkLimitExceeded as exc:
-            job.status = "failed"
-            job.error_code = "TOO_MANY_CHUNKS"
-            job.error_message = str(exc)
         except Exception as exc:
-            if job.attempt_count < 5:
-                job.attempt_count += 1
+            if isinstance(exc, ChunkLimitExceeded):
+                error = TTSJobError(
+                    code="TOO_MANY_CHUNKS",
+                    message=str(exc),
+                    retryable=False,
+                )
+            elif isinstance(exc, TTSJobError):
+                error = exc
+            else:
+                error = TTSJobError(
+                    code="INTERNAL_ERROR",
+                    message=str(exc),
+                    retryable=False,
+                )
+
+            if (
+                error.retryable
+                and job.attempt_count <= settings.tts_max_auto_retries
+            ):
                 job.status = "queued"
                 job.progress = 0
                 job.started_at = None
                 job.error_code = None
                 job.error_message = None
                 await session.commit()
-
-                await asyncio.sleep(2)
                 from app.workers.queue_manager import queue_manager
 
-                await queue_manager.enqueue(job.id)
+                delay = calculate_retry_delay(
+                    attempt=job.attempt_count - 1,
+                    base_delay_seconds=settings.tts_retry_base_delay_seconds,
+                    retry_after_seconds=error.retry_after_seconds,
+                    jitter=random.uniform(0, 1),
+                )
+                await queue_manager.enqueue_after(
+                    job.id,
+                    delay_seconds=delay,
+                )
                 return
 
             job.status = "failed"
-            job.error_code = (
-                "PROVIDER_UNAVAILABLE"
-                if "Provider" in str(exc)
-                else "INTERNAL_ERROR"
-            )
-            job.error_message = str(exc)
+            job.error_code = error.code
+            job.error_message = error.message
 
         await session.commit()

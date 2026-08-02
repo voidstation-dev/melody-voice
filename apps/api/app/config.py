@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     tts_min_rate: float = 0.5
     tts_max_rate: float = 2.0
     tts_provider_timeout_seconds: float = 90.0
+    tts_max_auto_retries: int = 2
+    tts_retry_base_delay_seconds: float = 2.0
+    tts_apply_rate_with_ffmpeg: bool = False
     tts_audio_max_bytes: int = 52428800
     tts_progress_commit_interval_seconds: float = 1.0
     tts_progress_commit_step_percent: int = 5
