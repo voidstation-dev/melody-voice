@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Fixed
 
 - Release workflow now produces the full updater artifact set (`latest.json`, signed `.sig` files, and the Windows NSIS updater archive) by gating the build on the updater signing secret, and uploads workflow artifacts for every bundle.
+- Enabled `bundle.createUpdaterArtifacts` in the Tauri config so the bundler emits signed `.sig` files and the `latest.json` updater manifest is uploaded for auto-update.
 - Pinned `tauri-apps/tauri-action` to a verified release tag instead of a mutable major branch.
 - Added `workflow_dispatch` trigger so the release pipeline can be run on-demand without a tag push.
 - Fixed TypeScript error with ImportedTextFile type in TTS Studio.
