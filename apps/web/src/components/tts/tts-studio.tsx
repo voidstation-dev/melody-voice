@@ -168,9 +168,13 @@ export function TTSStudio() {
       setConflictDialog({
         isOpen: true,
         file: {
+          id: crypto.randomUUID(),
           text: jobText,
           fileName: fileName || "Reparsed Text",
           sizeBytes: jobText.length,
+          mimeType: "text/plain",
+          characterCount: jobText.length,
+          importedAt: new Date().toISOString(),
         },
       });
     } else {

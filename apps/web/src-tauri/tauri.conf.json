@@ -28,7 +28,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": true,
     "externalBin": [
       "bin/melody-api"
     ],
