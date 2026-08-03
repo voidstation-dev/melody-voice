@@ -77,10 +77,22 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
       });
 
       let resolveReady: (() => void) | undefined;
+      let rejectReady: ((reason: Error) => void) | undefined;
       let didResolve = false;
-      const readyPromise = new Promise<void>((resolve) => {
+      const readyPromise = new Promise<void>((resolve, reject) => {
         resolveReady = resolve;
+        rejectReady = reject;
       });
+
+      // If the sidecar never prints a port (e.g. macOS Gatekeeper quarantines
+      // the bundled binary and blocks its launch silently), the ready promise
+      // would never settle and the UI would hang on "Starting local
+      // environment..." forever. Time out so the user gets actionable guidance.
+      const startupTimeoutMs = 15_000;
+      const startupTimer = setTimeout(() => {
+        if (didResolve || !mountedRef.current) return;
+        rejectReady?.(new Error("Local API did not start in time"));
+      }, startupTimeoutMs);
 
       const probeHealth = async (url: string) => {
         for (let attempt = 0; attempt < 10; attempt++) {
@@ -88,6 +100,7 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
             const response = await fetch(`${url}/api/v1/health/live`, { method: "GET" });
             if (response.ok && mountedRef.current && !didResolve) {
               didResolve = true;
+              clearTimeout(startupTimer);
               console.log(`Successfully connected to API at ${url}`);
               setApiConnection(url, apiToken);
               setIsReady(true);
@@ -120,6 +133,7 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
 
       const process = await sidecar.spawn();
       if (!mountedRef.current) {
+        clearTimeout(startupTimer);
         await process.kill();
         throw new Error("Sidecar provider unmounted during startup");
       }
@@ -194,10 +208,20 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
   );
 
   if (error) {
+    const isStartupTimeout = error.includes("did not start in time");
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-4 p-8 text-center text-destructive">
         <h2 className="text-xl font-bold">Failed to start local API</h2>
         <p className="font-mono text-sm">{error}</p>
+        {isStartupTimeout && (
+          <div className="max-w-md text-sm text-muted-foreground">
+            <p className="mb-2">
+              macOS may be blocking the bundled API binary. Open Terminal and run:
+            </p>
+            <pre className="rounded bg-muted p-2 text-left text-xs">xattr -cr /Applications/VoidMelody.app</pre>
+            <p className="mt-2">Then relaunch the app.</p>
+          </div>
+        )}
       </div>
     );
   }

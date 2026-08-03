@@ -151,6 +151,32 @@ describe("TauriProvider", () => {
     expect(screen.getByText("Error: sidecar unavailable")).toBeInTheDocument();
   });
 
+  it("surfaces a timeout error with the xattr workaround when the sidecar never prints a port", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const sidecar = makeSidecar();
+    bridge.sidecar.mockReturnValue(sidecar.command);
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(
+        <TauriProvider>
+          <ContextProbe />
+        </TauriProvider>,
+      );
+
+      await waitFor(() => expect(sidecar.command.spawn).toHaveBeenCalledOnce());
+      // Sidecar spawned but never emits a port line (e.g. macOS blocks the
+      // quarantined binary). The startup timeout should fire and surface the
+      // xattr -cr guidance instead of hanging on "Starting local environment...".
+      await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+      expect(await screen.findByRole("heading", { name: "Failed to start local API" })).toBeInTheDocument();
+      expect(screen.getByText(/did not start in time/)).toBeInTheDocument();
+      expect(screen.getByText(/xattr -cr/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("starts only one sidecar across React development effect replay", async () => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
     const sidecar = makeSidecar();

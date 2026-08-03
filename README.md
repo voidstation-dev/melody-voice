@@ -155,9 +155,17 @@ On macOS, `brew install ffmpeg` is the usual installation method. On Windows, `w
 
 Install the Evergreen WebView2 Runtime and Visual Studio 2022 Build Tools with Desktop development with C++, MSVC v143, and a Windows SDK. Restart the terminal, then run `rustup default stable-msvc` and `pnpm setup:desktop` again.
 
-### macOS says the app cannot be opened
+### macOS says the app cannot be opened, or it hangs on "Starting local environment..."
 
-Unsigned local and release builds can be blocked by Gatekeeper. In Finder, Control-click the app, choose **Open**, and confirm the prompt. This phase signs only the Tauri updater artifacts; Apple code signing and notarization are not configured, so Gatekeeper warnings are expected.
+Unsigned local and release builds are tagged with a `com.apple.quarantine` attribute by Gatekeeper. In Finder, Control-click the app, choose **Open**, and confirm the prompt to dismiss the open dialog.
+
+If the app launches but never leaves the "Starting local environment..." screen, the quarantine attribute is also being applied to the bundled `melody-api` sidecar binary, which macOS then refuses to launch silently. The Tauri shell plugin spawns the sidecar but no port is ever printed, so the desktop UI waits forever. Clear the attribute recursively and relaunch:
+
+```bash
+xattr -cr /Applications/VoidMelody.app
+```
+
+This phase signs only the Tauri updater artifacts; Apple Developer ID code signing and notarization are not configured, so Gatekeeper quarantine is expected for downloaded builds.
 
 ### Windows SmartScreen warns about the installer
 
