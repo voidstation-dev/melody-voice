@@ -50,7 +50,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY3QzY4NjQyNEY2OUU1OTEKUldTUjVXbFBRb2JHWjFIQkFNTmNxTnlrUXJjeXdSWEl0ZENlU0VVVmpDeWpIZzV3dFJUbG1YQzcK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQxMTBBMzE5RjJBNDkyNgpSV1FtU1NxZk1Rb1JCSlFRekRTbmRVM3FjQkdqSHlkdHBVWUN6c3lGb2VtZlFTSk9KbWhzRk5lYgo=",
       "endpoints": [
         "https://github.com/voidstation-dev/void-melody/releases/latest/download/latest.json"
       ],
