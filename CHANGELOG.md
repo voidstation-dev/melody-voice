@@ -4,6 +4,13 @@ All notable changes to VoidMelody Desktop are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-08-04
+
+### Fixed
+
+- Desktop UI now surfaces a startup timeout with an `xattr -cr` workaround hint when the local API sidecar is blocked by macOS Gatekeeper quarantine, instead of hanging on "Starting local environment..." indefinitely.
+- Documented the macOS quarantine workaround (Finder Open + `xattr -cr`) and Windows SmartScreen "Run anyway" flow in the README troubleshooting section.
+
 ## [0.2.2] - 2026-08-03
 
 ### Fixed
