@@ -110,8 +110,12 @@ The release workflow receives these secrets only in the Tauri build step. `GITHU
 1. Set the same version in `apps/web/src-tauri/tauri.conf.json`, `apps/web/src-tauri/Cargo.toml`, and `apps/web/package.json`, then add its exact `## [X.Y.Z]` section to `CHANGELOG.md`.
 2. From a clean checkout, run `pnpm setup:desktop`, `pnpm test:api`, `pnpm test:web`, and `pnpm build:desktop` on each supported platform.
 3. Run `pnpm test:release-metadata` locally. The helper rejects any non-`vX.Y.Z` tag, version mismatch, or missing changelog section.
-4. Commit the version change, create an exact tag such as `v0.2.1`, and push the tag. The workflow builds only macOS ARM64 and Windows x64, then creates a draft release with installers, updater archives/signatures, and `latest.json`.
+4. Commit the version change, create an exact tag such as `v0.2.2`, and push the tag. The workflow builds only macOS ARM64 and Windows x64, then creates a draft release with installers, updater archives/signatures, and `latest.json`.
 5. Test the draft artifacts before selecting **Publish release** in GitHub. Publishing remains a manual action.
+
+### On-demand release builds
+
+The release workflow also exposes a `workflow_dispatch` trigger for running the pipeline without a tag push. Provide the exact `vX.Y.Z` tag to build (it must equal the version in `tauri.conf.json`, `Cargo.toml`, and `apps/web/package.json`). This is useful for re-running a failed release build or rebuilding the artifact set after adding the updater signing secret. The workflow still creates (or updates) a draft release for that tag.
 
 ### Updater smoke tests and rollback
 
