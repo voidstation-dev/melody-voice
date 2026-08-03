@@ -92,7 +92,13 @@ describe("UpdateSettings", () => {
     const manualCheck = deferred<null>();
     bridge.check.mockResolvedValueOnce(null).mockReturnValueOnce(manualCheck.promise);
     await renderSettings(true);
-    expect(await screen.findByLabelText("Current version")).toHaveTextContent("v0.2.0");
+    // currentVersion starts at "dev" and is updated asynchronously once
+    // getRuntimeVersion() resolves, so wait for the settled text rather than
+    // asserting synchronously on the first render.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Current version")).toHaveTextContent("v0.2.0"),
+    );
+    expect(bridge.getVersion).toHaveBeenCalled();
     await waitFor(() => expect(bridge.check).toHaveBeenCalledOnce());
 
     fireEvent.click(screen.getByRole("button", { name: "Check for updates" }));

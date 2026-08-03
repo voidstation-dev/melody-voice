@@ -70,6 +70,12 @@ LEGACY_ADDITIONS = {
     "cancel_requested": "BOOLEAN NOT NULL DEFAULT 0",
     "started_at": "DATETIME",
 }
+# Columns introduced by migrations after BASELINE_REVISION. An unversioned
+# schema that already contains all of these matches the current model metadata
+# (e.g. created by Base.metadata.create_all) and must be stamped at head rather
+# than adopted as legacy, otherwise the head migration would try to re-add the
+# column and fail with "duplicate column name".
+POST_BASELINE_COLUMNS = {"audio_duration"}
 
 
 class MigrationError(RuntimeError):
@@ -107,6 +113,15 @@ def _current_revision(connection: sqlite3.Connection) -> str | None:
         "SELECT version_num FROM alembic_version LIMIT 1"
     ).fetchone()
     return row[0] if row else None
+
+
+def _has_post_baseline_columns(connection: sqlite3.Connection) -> bool:
+    if not _table_exists(connection, "tts_jobs"):
+        return False
+    columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(tts_jobs)")
+    }
+    return POST_BASELINE_COLUMNS.issubset(columns)
 
 
 def _backup_database(database_path: Path, *, retain: int = 3) -> Path:
@@ -207,9 +222,21 @@ def _run_database_migrations(
         with sqlite3.connect(database_path) as connection:
             has_jobs_table = _table_exists(connection, "tts_jobs")
             current_revision = _current_revision(connection)
+            schema_is_current = (
+                has_jobs_table
+                and current_revision is None
+                and _has_post_baseline_columns(connection)
+            )
 
         if has_jobs_table and current_revision is None:
-            _adopt_legacy_schema(config, database_path)
+            if schema_is_current:
+                # The table already reflects the current model metadata (no
+                # alembic_version row yet). Stamp it at head instead of running
+                # the migrations, which would otherwise re-add columns that
+                # already exist.
+                command.stamp(config, head_revision)
+            else:
+                _adopt_legacy_schema(config, database_path)
         elif (
             has_jobs_table
             and current_revision is not None

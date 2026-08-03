@@ -24,7 +24,29 @@ async def test_download_audio_success(tmp_path: Path):
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_download_rejects_non_audio_payload(tmp_path: Path):
+async def test_download_rejects_disallowed_content_type(tmp_path: Path):
+    target_url = "https://cdn.example.com/not-audio"
+    respx.get(target_url).mock(
+        return_value=Response(
+            200,
+            content=b"<html>provider error</html>",
+            headers={"Content-Type": "text/html"},
+        )
+    )
+    destination = tmp_path / "invalid.mp3"
+
+    with pytest.raises(ValueError, match="Unexpected content type"):
+        await download_audio(url=target_url, destination=destination)
+
+    assert not destination.exists()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_download_accepts_octet_stream_payload_rejected_by_validation(tmp_path: Path):
+    # Providers sometimes return application/octet-stream for audio. download_audio
+    # streams it through (it does not inspect magic bytes); the audio-signature
+    # rejection is the responsibility of validate_audio_file, invoked afterwards.
     target_url = "https://cdn.example.com/not-audio"
     respx.get(target_url).mock(
         return_value=Response(
@@ -35,10 +57,13 @@ async def test_download_rejects_non_audio_payload(tmp_path: Path):
     )
     destination = tmp_path / "invalid.mp3"
 
-    with pytest.raises(ValueError, match="audio signature"):
-        await download_audio(url=target_url, destination=destination)
+    mime, _ = await download_audio(url=target_url, destination=destination)
+    assert mime == "application/octet-stream"
 
-    assert not destination.exists()
+    with pytest.raises(TTSJobError, match="invalid signature") as exc_info:
+        validate_audio_file(destination, mime_type=mime)
+    assert exc_info.value.code == "AUDIO_INVALID_CONTENT"
+    assert exc_info.value.retryable is False
 
 
 @pytest.mark.asyncio

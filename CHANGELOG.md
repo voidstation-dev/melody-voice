@@ -4,6 +4,18 @@ All notable changes to VoidMelody Desktop are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-08-03
+
+### Fixed
+
+- Release workflow now produces the full updater artifact set (`latest.json`, signed `.sig` files, and the Windows NSIS updater archive) by gating the build on the updater signing secret, and uploads workflow artifacts for every bundle.
+- Pinned `tauri-apps/tauri-action` to a verified release tag instead of a mutable major branch.
+- Added `workflow_dispatch` trigger so the release pipeline can be run on-demand without a tag push.
+
+### Changed
+
+- Restored mandatory API and web test gates (`pnpm test:api`, `pnpm test:web`) in the release workflow before the desktop build.
+
 ## [0.2.0] - 2026-08-02
 
 ### Added
