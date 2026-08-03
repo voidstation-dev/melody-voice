@@ -4,6 +4,12 @@ All notable changes to VoidMelody Desktop are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] - 2026-08-04
+
+### Fixed
+
+- Bundled FFmpeg is now a self-contained static build (from `eugeneware/ffmpeg-static`) instead of the Homebrew dynamic-linked binary, so TTS audio processing no longer crashes with `dyld: Library not loaded: .../libavdevice.62.dylib` on machines without the exact Homebrew Cellar. The release workflow no longer installs FFmpeg via brew/choco; `setup-ffmpeg.js` downloads the portable binary for the runner platform.
+
 ## [0.2.3] - 2026-08-04
 
 ### Fixed
