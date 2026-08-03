@@ -72,14 +72,6 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Install FFmpeg on macOS
-        if: runner.os == 'macOS'
-        run: brew install ffmpeg
-
-      - name: Install FFmpeg on Windows
-        if: runner.os == 'Windows'
-        run: choco install ffmpeg --no-progress --yes
-
       - name: Set up desktop dependencies
         run: pnpm setup:desktop
 
