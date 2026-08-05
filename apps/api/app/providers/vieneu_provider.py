@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import tempfile
+from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from vieneu_core.engine import ModelManager
@@ -90,3 +91,92 @@ class VieneuProvider:
             )
         finally:
             wav_path.unlink(missing_ok=True)
+
+    async def synthesize_stream(
+        self,
+        *,
+        text: str,
+        voice_type: str,
+        resource_id: str | None,
+        rate: float,
+        style: str | None = None,
+    ) -> AsyncGenerator[bytes, None]:
+        engine = await self.manager.get_engine()
+        ffmpeg_binary = os.environ.get("FFMPEG_BINARY_PATH", "ffmpeg")
+
+        command = [
+            ffmpeg_binary,
+            "-y",
+            "-f",
+            "f32le",
+            "-ar",
+            "48000",
+            "-ac",
+            "1",
+            "-i",
+            "pipe:0",
+            "-f",
+            "mp3",
+            "pipe:1",
+        ]
+
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+
+        async def feed_pcm():
+            try:
+                # The infer_stream method is a generator, so we must advance it in a thread.
+                gen = engine.infer_stream(
+                    text=text,
+                    voice=voice_type,
+                    style=style or "tu_nhien",
+                    apply_watermark=False,
+                )
+
+                def get_next():
+                    try:
+                        return next(gen)
+                    except StopIteration:
+                        return None
+
+                while True:
+                    async with self._inference_semaphore:
+                        chunk = await asyncio.to_thread(get_next)
+
+                    if chunk is None:
+                        break
+
+                    if process.stdin:
+                        process.stdin.write(chunk.tobytes())
+                        await process.stdin.drain()
+            except Exception:
+                logger.exception("Error in PCM feeder")
+            finally:
+                if process.stdin:
+                    process.stdin.close()
+                    try:
+                        await process.stdin.wait_closed()
+                    except Exception:  # noqa: S110, BLE001
+                        pass
+
+        feeder_task = asyncio.create_task(feed_pcm())
+
+        try:
+            if not process.stdout:
+                raise RuntimeError("Process stdout is None")
+            while True:
+                data = await process.stdout.read(8192)
+                if not data:
+                    break
+                yield data
+        finally:
+            feeder_task.cancel()
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+            await process.wait()

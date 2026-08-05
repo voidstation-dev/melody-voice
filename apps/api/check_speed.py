@@ -24,7 +24,7 @@ def get_duration(url):
     try:
         out = subprocess.check_output(cmd).decode().strip()
         return float(out)
-    except:
+    except Exception:  # noqa: BLE001
         return 0.0
 
 

@@ -34,7 +34,7 @@ async def _database_ready() -> bool:
         async with AsyncSessionLocal() as session:
             await session.execute(text("SELECT 1"))
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001
         return False
 
 
@@ -66,7 +66,7 @@ async def readiness_check():
     try:
         voice_count = len(voice_catalog.list_voices())
         catalog_ok = voice_count > 0
-    except Exception:
+    except Exception:  # noqa: BLE001
         voice_count = 0
         catalog_ok = False
 

@@ -48,6 +48,7 @@ async def execute_chunks_bounded(
     *,
     concurrency: int,
     process_chunk: Callable[..., Awaitable[ResultT]],
+    is_cancelled: Callable[[], Awaitable[bool]] | None = None,
 ) -> AsyncIterator[ResultT]:
     if concurrency < 1:
         raise ValueError("concurrency must be at least 1")
@@ -69,8 +70,13 @@ async def execute_chunks_bounded(
                 text = chunks[index]
 
             try:
+                if is_cancelled is not None:
+                    cancelled = await is_cancelled()
+                    if cancelled:
+                        raise asyncio.CancelledError("Job was cancelled by user")
+
                 result = await process_chunk(index=index, text=text)
-            except BaseException as exc:
+            except BaseException as exc:  # noqa: BLE001
                 await output_queue.put(_Failure(exc))
                 return
             await output_queue.put(result)

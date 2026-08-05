@@ -13,6 +13,7 @@ from app.schemas.tts import (
     CreateTTSJobRequest,
     TTSJobListResponse,
     TTSJobResponse,
+    TTSPreviewRequest,
 )
 from app.services.tts_service import (
     create_tts_job,
@@ -72,7 +73,7 @@ from app.workers.queue_manager import queue_manager
 )
 async def create_job_endpoint(
     req: CreateTTSJobRequest,
-    session: AsyncSession = Depends(get_async_session),
+    session: AsyncSession = Depends(get_async_session),  # noqa: B008,
 ):
     if len(req.text) > settings.tts_max_text_chars:
         raise HTTPException(status_code=422, detail="TEXT_TOO_LONG")
@@ -123,7 +124,7 @@ async def list_jobs_endpoint(
     status: str | None = None,
     page: int = 1,
     pageSize: int = 20,
-    session: AsyncSession = Depends(get_async_session),
+    session: AsyncSession = Depends(get_async_session),  # noqa: B008,
 ):
     jobs, total = await list_jobs(session, status=status, page=page, page_size=pageSize)
     return TTSJobListResponse(
@@ -136,7 +137,8 @@ async def list_jobs_endpoint(
 
 @router.get("/tts/jobs/{job_id}", response_model=TTSJobResponse)
 async def get_job_endpoint(
-    job_id: str, session: AsyncSession = Depends(get_async_session)
+    job_id: str,
+    session: AsyncSession = Depends(get_async_session),  # noqa: B008
 ):
     job = await get_job_by_id(session, job_id)
     if not job:
@@ -151,7 +153,9 @@ from app.utils.audio_utils import convert_mp3_to_m4a
 
 @router.get("/tts/jobs/{job_id}/audio")
 async def stream_audio_endpoint(
-    job_id: str, format: str = "mp3", session: AsyncSession = Depends(get_async_session)
+    job_id: str,
+    format: str = "mp3",
+    session: AsyncSession = Depends(get_async_session),  # noqa: B008
 ):
     job = await get_job_by_id(session, job_id)
     if not job or job.status != "completed" or not job.audio_path:
@@ -181,7 +185,9 @@ async def stream_audio_endpoint(
 
 @router.get("/tts/jobs/{job_id}/download")
 async def download_audio_endpoint(
-    job_id: str, format: str = "mp3", session: AsyncSession = Depends(get_async_session)
+    job_id: str,
+    format: str = "mp3",
+    session: AsyncSession = Depends(get_async_session),  # noqa: B008
 ):
     job = await get_job_by_id(session, job_id)
     if not job or job.status != "completed" or not job.audio_path:
@@ -212,7 +218,8 @@ async def download_audio_endpoint(
 
 @router.delete("/tts/jobs/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_job_endpoint(
-    job_id: str, session: AsyncSession = Depends(get_async_session)
+    job_id: str,
+    session: AsyncSession = Depends(get_async_session),  # noqa: B008
 ):
     job = await get_job_by_id(session, job_id)
     if not job:
@@ -239,7 +246,8 @@ async def delete_job_endpoint(
 
 @router.post("/tts/jobs/{job_id}/retry", response_model=TTSJobResponse)
 async def retry_job_endpoint(
-    job_id: str, session: AsyncSession = Depends(get_async_session)
+    job_id: str,
+    session: AsyncSession = Depends(get_async_session),  # noqa: B008
 ):
     job = await get_job_by_id(session, job_id)
     if not job:
@@ -280,3 +288,71 @@ async def retry_job_endpoint(
     await queue_manager.enqueue(retried_job.id)
 
     return serialize_job(retried_job)
+
+
+from fastapi.responses import StreamingResponse
+
+from app.providers.capcut_provider import CapCutProvider
+from app.providers.vieneu_provider import VieneuProvider
+
+
+@router.post("/tts/preview")
+async def preview_tts_endpoint(
+    req: TTSPreviewRequest,
+):
+    if len(req.text) > 1000:
+        raise HTTPException(status_code=422, detail="Text too long for preview")
+
+    matched = voice_catalog.get_voice(req.voiceType)
+    if not matched:
+        raise HTTPException(
+            status_code=422,
+            detail="VOICE_NOT_FOUND: Selected voice type does not exist",
+        )
+
+    provider_id = getattr(matched, "provider_id", "capcut")
+    provider = (
+        VieneuProvider()
+        if provider_id == "vieneu"
+        else CapCutProvider(catalog_path=settings.capcut_catalog_path)
+    )
+
+    # We return a StreamingResponse that yields bytes
+    async def generator():
+        try:
+            async for chunk in provider.synthesize_stream(
+                text=req.text,
+                voice_type=req.voiceType,
+                resource_id=matched.resource_id,
+                rate=req.rate,
+                style=req.style,
+            ):
+                yield chunk
+        except Exception as e:  # noqa: BLE001
+            logger.error("Error streaming preview: %s", e)
+
+    return StreamingResponse(generator(), media_type="audio/mpeg")
+
+
+@router.post("/tts/jobs/{job_id}/cancel", status_code=status.HTTP_200_OK)
+async def cancel_job_endpoint(
+    job_id: str,
+    session: AsyncSession = Depends(get_async_session),  # noqa: B008
+):
+    job = await get_job_by_id(session, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="JOB_NOT_FOUND")
+
+    if job.status in ["completed", "failed", "cancelled"]:
+        raise HTTPException(
+            status_code=400, detail="Job cannot be cancelled in its current state"
+        )
+
+    if job.status == "queued":
+        job.status = "cancelled"
+    else:
+        # If processing, signal cancellation
+        job.cancel_requested = True
+
+    await session.commit()
+    return serialize_job(job)

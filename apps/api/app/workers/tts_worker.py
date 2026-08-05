@@ -210,11 +210,16 @@ async def execute_tts_job_step(
                     job=snapshot,
                 )
 
+            async def check_cancelled() -> bool:
+                await session.refresh(job, ["cancel_requested"])
+                return job.cancel_requested
+
             completed = 0
             async for result in execute_chunks_bounded(
                 chunks,
                 concurrency=settings.tts_chunk_concurrency,
                 process_chunk=run_chunk,
+                is_cancelled=check_cancelled,
             ):
                 downloaded_files.append(result.path)
                 raw_responses[result.index] = result.raw_response
@@ -264,7 +269,24 @@ async def execute_tts_job_step(
                 },
             )
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
+            import asyncio
+
+            if (
+                isinstance(exc, asyncio.CancelledError)
+                or getattr(exc, "args", [None])[0] == "Job was cancelled by user"
+            ):
+                # Handle cancellation
+                for part in downloaded_files:
+                    part.unlink(missing_ok=True)
+                job.status = "cancelled"
+                job.progress = 0
+                job.error_code = "CANCELLED"
+                job.error_message = "Job was cancelled by the user"
+                await session.commit()
+                logger.info("Job cancelled: %s", job.id)
+                return
+
             if isinstance(exc, ChunkLimitExceeded):
                 error = TTSJobError(
                     code="TOO_MANY_CHUNKS",

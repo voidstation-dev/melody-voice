@@ -21,7 +21,7 @@ def mock_model_manager():
 
 @pytest.mark.asyncio
 async def test_vieneu_provider_synthesize(mock_model_manager):
-    mock_manager, mock_engine = mock_model_manager
+    _mock_manager, mock_engine = mock_model_manager
     provider = VieneuProvider()
 
     with patch("asyncio.create_subprocess_exec") as mock_exec:

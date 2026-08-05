@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
 from typing import Any
 
@@ -72,3 +72,39 @@ class CapCutProvider:
             raw_response=response,
             audio_urls=extract_audio_urls(response),
         )
+
+    async def synthesize_stream(
+        self,
+        *,
+        text: str,
+        voice_type: str,
+        resource_id: str | None,
+        rate: float,
+        style: str | None = None,
+    ) -> AsyncGenerator[bytes, None]:
+        import httpx
+
+        from app.exceptions import TTSJobError
+
+        result = await self.synthesize(
+            text=text,
+            voice_type=voice_type,
+            resource_id=resource_id,
+            rate=rate,
+            style=style,
+        )
+        if not result.audio_urls:
+            raise TTSJobError(
+                code="AUDIO_URL_NOT_FOUND",
+                message="CapCut did not return an audio URL",
+                retryable=False,
+            )
+
+        url = result.audio_urls[0]
+        async with (
+            httpx.AsyncClient(timeout=30.0) as client,
+            client.stream("GET", url) as response,
+        ):
+            response.raise_for_status()
+            async for chunk in response.aiter_bytes(chunk_size=8192):
+                yield chunk

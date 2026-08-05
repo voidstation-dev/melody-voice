@@ -64,8 +64,7 @@ def split_text_into_chunks(text: str, max_chars: int = 450) -> list[str]:
                                 word[i : i + max_chars]
                                 for i in range(0, len(word), max_chars)
                             ]
-                            for sc in sub_chunks[:-1]:
-                                chunks.append(sc)
+                            chunks.extend(sub_chunks[:-1])
                             current_chunk = sub_chunks[-1]
                         else:
                             current_chunk = word

@@ -50,17 +50,13 @@ async def test_duplicate_enqueue_is_ignored():
 
 
 @pytest.mark.asyncio
-async def test_each_queue_worker_owns_one_provider(monkeypatch):
-    providers: list[object] = []
+async def test_queue_workers_share_provider_registry(monkeypatch):
 
-    def provider_factory():
-        provider = object()
-        providers.append(provider)
-        return provider
+    provider = {"capcut": object()}
 
     execute = AsyncMock()
     monkeypatch.setattr("app.workers.queue_manager.execute_tts_job_step", execute)
-    manager = TTSQueueManager(concurrency=2, provider_factory=provider_factory)
+    manager = TTSQueueManager(concurrency=2, provider_registry=provider)
 
     await manager.start()
     try:
@@ -70,10 +66,10 @@ async def test_each_queue_worker_owns_one_provider(monkeypatch):
     finally:
         await manager.stop()
 
-    assert len(providers) == 2
-    used_providers = {call.kwargs["provider"] for call in execute.await_args_list}
-    assert used_providers
-    assert used_providers.issubset(set(providers))
+    assert manager.provider_registry == provider
+    for call in execute.await_args_list:
+        assert call.kwargs["provider_registry"] is provider
+    assert len(execute.await_args_list) == 2
 
 
 @pytest.mark.asyncio
@@ -96,7 +92,7 @@ async def test_shutdown_requeues_interrupted_processing_job(monkeypatch):
     )
     manager = TTSQueueManager(
         concurrency=1,
-        provider_factory=object,
+        provider_registry={"capcut": object()},
         shutdown_grace_seconds=0.01,
     )
 
@@ -111,7 +107,7 @@ async def test_shutdown_requeues_interrupted_processing_job(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_queue_health_snapshot_reports_workers_and_depth():
-    manager = TTSQueueManager(concurrency=2, provider_factory=object)
+    manager = TTSQueueManager(concurrency=2, provider_registry={"capcut": object()})
     await manager.start()
     try:
         await manager.enqueue("job-1")

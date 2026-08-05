@@ -89,5 +89,5 @@ async def get_audio_duration(file_path: Path) -> float | None:
             duration = float(h) * 3600 + float(m) * 60 + float(s)
             return duration
         return None
-    except BaseException:
+    except Exception:  # noqa: BLE001
         return None

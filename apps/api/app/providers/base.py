@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -31,3 +32,12 @@ class TTSProvider(Protocol):
         rate: float,
         style: str | None = None,
     ) -> ProviderResult: ...
+    async def synthesize_stream(
+        self,
+        *,
+        text: str,
+        voice_type: str,
+        resource_id: str | None,
+        rate: float,
+        style: str | None = None,
+    ) -> AsyncGenerator[bytes, None]: ...

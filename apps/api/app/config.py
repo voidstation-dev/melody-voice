@@ -14,7 +14,7 @@ _catalog_path = Path(
 class Settings(BaseSettings):
     app_env: str = "development"
     api_host: str = "127.0.0.1"
-    api_port: int = int(os.environ.get("API_PORT", 8000))
+    api_port: int = int(os.environ.get("API_PORT", "8000"))
     melody_api_token: str | None = None
     cors_origins: list[str] = ["*"]  # Allow electron origins like file:// or app://
     database_url: str = f"sqlite+aiosqlite:///{_data_dir}/app.db"

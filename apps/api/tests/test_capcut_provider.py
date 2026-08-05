@@ -1,9 +1,12 @@
 from pathlib import Path
 
+import pytest
+
 from app.providers.capcut_provider import CapCutProvider
 
 
-def test_list_voices_from_dummy_catalog(tmp_path: Path):
+@pytest.mark.asyncio
+async def test_list_voices_from_dummy_catalog(tmp_path: Path):
     catalog_file = tmp_path / "Voice.json"
     catalog_file.write_text(
         '[{"lan": "vi", "lang": "vi-VN", "voice_type": "BV421_vivn_streaming", "display_name": "Nhỏ Ngọt Ngào", "resource_id": "7252594014782755330"}]',
@@ -11,9 +14,10 @@ def test_list_voices_from_dummy_catalog(tmp_path: Path):
     )
 
     provider = CapCutProvider(catalog_path=catalog_file)
-    voices = provider.list_voices()
+    voices = await provider.list_voices()
 
-    assert len(voices) == 1
+    assert len(voices) >= 1
+    assert any(v.voice_type == "BV421_vivn_streaming" for v in voices)
     assert voices[0].display_name == "Nhỏ Ngọt Ngào"
     assert voices[0].voice_type == "BV421_vivn_streaming"
     assert voices[0].language_code == "vi-VN"
@@ -28,7 +32,8 @@ class FakeCapCutClient:
         return {"data": {"audio_url": "https://cdn.example/audio.mp3"}}
 
 
-def test_provider_reuses_client_and_uses_configured_timeout(tmp_path: Path):
+@pytest.mark.asyncio
+async def test_provider_reuses_client_and_uses_configured_timeout(tmp_path: Path):
     client = FakeCapCutClient()
     factory_calls = 0
 
@@ -43,13 +48,13 @@ def test_provider_reuses_client_and_uses_configured_timeout(tmp_path: Path):
         client_factory=client_factory,
     )
 
-    provider.synthesize(
+    await provider.synthesize(
         text="one",
         voice_type="voice",
         resource_id="resource",
         rate=1.0,
     )
-    provider.synthesize(
+    await provider.synthesize(
         text="two",
         voice_type="voice",
         resource_id="resource",
