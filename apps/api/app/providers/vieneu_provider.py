@@ -2,12 +2,16 @@ import asyncio
 import logging
 import os
 import tempfile
+import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
+from sqlalchemy import select
 from vieneu_core.engine import ModelManager
 from vieneu_core.fixtures import FIXTURE_VOICES
 
+from app.database import AsyncSessionLocal
+from app.models.custom_voice import CustomVoiceModel
 from app.providers.base import ProviderResult, ProviderVoice
 
 logger = logging.getLogger(__name__)
@@ -42,13 +46,17 @@ class VieneuProvider:
     ) -> ProviderResult:
         logger.info("VieneuProvider synthesizing %s", voice_type)
         engine = await self.manager.get_engine()
+        
+        voice_id, ref_audio, prompt_text = await self._resolve_custom_voice(voice_type)
 
         # inference is cpu bound, run in thread behind semaphore
         async with self._inference_semaphore:
             wav = await asyncio.to_thread(
                 engine.infer,
                 text=text,
-                voice=voice_type,
+                voice=voice_id,
+                ref_audio=ref_audio,
+                prompt_text=prompt_text,
                 style=style or "tu_nhien",
                 apply_watermark=False,
             )
@@ -127,12 +135,16 @@ class VieneuProvider:
             stderr=asyncio.subprocess.DEVNULL,
         )
 
+        voice_id, ref_audio, prompt_text = await self._resolve_custom_voice(voice_type)
+
         async def feed_pcm():
             try:
                 # The infer_stream method is a generator, so we must advance it in a thread.
                 gen = engine.infer_stream(
                     text=text,
-                    voice=voice_type,
+                    voice=voice_id,
+                    ref_audio=ref_audio,
+                    prompt_text=prompt_text,
                     style=style or "tu_nhien",
                     apply_watermark=False,
                 )
@@ -162,7 +174,6 @@ class VieneuProvider:
                         await process.stdin.wait_closed()
                     except Exception:  # noqa: S110, BLE001
                         pass
-
         feeder_task = asyncio.create_task(feed_pcm())
 
         try:
@@ -180,3 +191,18 @@ class VieneuProvider:
             except ProcessLookupError:
                 pass
             await process.wait()
+
+    async def _resolve_custom_voice(self, voice_type: str) -> tuple[str | None, str | None, str | None]:
+        try:
+            uuid.UUID(voice_type)
+        except ValueError:
+            return voice_type, None, None
+
+        async with AsyncSessionLocal() as session:
+            stmt = select(CustomVoiceModel).where(CustomVoiceModel.id == voice_type)
+            result = await session.execute(stmt)
+            voice = result.scalars().first()
+            if voice and voice.reference_audio_path:
+                return None, voice.reference_audio_path, voice.transcript
+        
+        return voice_type, None, None

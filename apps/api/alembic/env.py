@@ -23,6 +23,8 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from app.config import settings
 from app.database import Base
+from app.models.custom_voice import CustomVoiceModel  # noqa: F401
+from app.models.tts_job import TTSJobModel  # noqa: F401
 
 runtime_database_url = config.attributes.get(
     "database_url",

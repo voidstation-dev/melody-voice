@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["*"]  # Allow electron origins like file:// or app://
     database_url: str = f"sqlite+aiosqlite:///{_data_dir}/app.db"
     audio_storage_dir: Path = _data_dir / "audio"
+    custom_voices_dir: Path = _data_dir / "voices"
     preview_storage_dir: Path = _data_dir / "previews"
     raw_response_dir: Path = _data_dir / "raw-responses"
     capcut_catalog_path: Path = _catalog_path

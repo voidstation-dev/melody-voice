@@ -48,6 +48,8 @@ async def test_vieneu_provider_synthesize(mock_model_manager):
         mock_engine.infer.assert_called_once_with(
             text="hello",
             voice="test_voice",
+            ref_audio=None,
+            prompt_text=None,
             style="tu_nhien",
             apply_watermark=False,
         )
