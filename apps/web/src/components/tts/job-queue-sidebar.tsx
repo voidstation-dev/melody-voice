@@ -78,6 +78,36 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [downloadFormat, setDownloadFormat] = useState<"mp3" | "m4a" | null>(null);
   const [downloadingFormat, setDownloadingFormat] = useState<"mp3" | "m4a" | null>(null);
+  
+  const sliderRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const slider = sliderRef.current;
+    if (!slider) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault(); // Prevent page scrolling
+      if (!audioRef.current || !duration) return;
+
+      let delta = 0;
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        delta = e.deltaX; // scroll right -> forward
+      } else {
+        delta = -e.deltaY; // scroll up (negative deltaY) -> forward
+      }
+      
+      // Map 50 pixels of scroll to roughly 2 seconds of seeking
+      const skipSeconds = (delta / 50) * 2; 
+      let newTime = audioRef.current.currentTime + skipSeconds;
+      newTime = Math.max(0, Math.min(newTime, duration));
+      
+      audioRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
+    };
+
+    slider.addEventListener("wheel", handleWheel, { passive: false });
+    return () => slider.removeEventListener("wheel", handleWheel);
+  }, [duration]);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioBlobUrlRef = useRef<string | null>(null);
@@ -340,6 +370,7 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
             </div>
             
             <div 
+              ref={sliderRef}
               className="flex-1 h-2 bg-border/50 rounded-full overflow-hidden cursor-pointer relative group"
               onClick={(e) => {
                 if (!audioRef.current || !duration) return;
@@ -348,6 +379,7 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
                 audioRef.current.currentTime = percent * duration;
                 setCurrentTime(percent * duration);
               }}
+              title="Scroll to seek"
             >
               <div 
                 className="absolute top-0 left-0 h-full bg-primary transition-all duration-100 ease-linear"
