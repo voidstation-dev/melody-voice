@@ -1,0 +1,24 @@
+[project]
+name = "vieneu-core"
+version = "0.1.0"
+description = "Framework-agnostic contracts, capabilities, errors, and fixtures for the VieNeu-TTS integration. Does not depend on FastAPI, SQLAlchemy, Next.js, Tauri, or VoidMelody app state."
+requires-python = ">=3.10"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["vieneu_core"]
+
+[tool.setuptools.package-dir]
+vieneu_core = "src/vieneu_core"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
