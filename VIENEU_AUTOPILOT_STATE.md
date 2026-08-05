@@ -3,20 +3,25 @@
 > Đây là file trạng thái bền vững cho quá trình tích hợp VieNeu-TTS vào VoidMelody.
 > Khi session bị gián đoạn, đọc file này và tiếp tục từ "Next Action".
 
-**Last Updated:** 2026-08-05 (Phase 0 — fixing review findings, round 1)
+**Last Updated:** 2026-08-05 (Phase 0 MERGED → Phase 1 starting)
 
 ## Current Phase
-Phase 0 — Baseline, architecture, source pinning, license inventory
+Phase 1 — UI shell (Giọng hiện tại / VieNeu / Giọng nói / Nhân bản giọng)
 
 ## Current Branch
-`feat/vieneu-phase-0-baseline` (chưa commit — đang fix review findings)
+`main` (sẽ tạo `feat/vieneu-phase-1-ui-shell`)
+
+## Phase 0 Status: ✅ MERGED
+- PR #7 squash-merged at `1661276d1e6cdbbc808c18d5b9fb76c0702b67d7`
+- CI: Web (lint/typecheck/test/build) PASS, API tests PASS
+- Branch deleted
 
 ## Current Worktree
 `/Users/phongvudzz/Desktop/voidmelody` (primary, chưa tạo worktree riêng)
 
 ## Main HEAD
-`0e21ba3b8d083ba9a73ff76a781721c4ab472332` (v0.2.4 — release: v0.2.4 with portable static ffmpeg)
-- origin/main đã đồng bộ (`git fetch origin` thành công, up to date)
+`1661276d1e6cdbbc808c18d5b9fb76c0702b67d7` (Phase 0 merged — feat(vieneu): phase 0 baseline...)
+- origin/main đã đồng bộ (`git pull` thành công)
 
 ## Source VieNeu SHA
 `a8c9fbf99749d5ce45c89111f71558d6ceef3424` (HEAD của https://github.com/pnnbao97/VieNeu-TTS tại thời điểm pin)
@@ -58,25 +63,21 @@ Phase 0 — Baseline, architecture, source pinning, license inventory
 - Lockfile integrity: `pnpm install --frozen-lockfile --offline` → up to date (verified by reviewer)
 
 ## Review Verdict
-**REQUEST CHANGES** (round 1). Blockers:
-1. Chưa commit — branch không có commit nào.
-2. Working tree polluted với build artifacts — cần clean commit boundary.
-3. `theme-provider.tsx` fix không cần thiết (typecheck pass trên main) — revert.
-
-Đang fix round 1. Xem VIENEU_PHASE_0_REVIEW.md.
+Phase 0: REQUEST CHANGES (round 1) → fixed → re-verified → APPROVED (self-verify round 2).
+3 blockers fixed: commit boundary explicit, theme-provider reverted, files restored.
+Xem VIENEU_PHASE_0_REVIEW.md.
 
 ## Commit SHA
-— (chưa commit — đang fix review findings)
+Phase 0: `30996f8` (+ `dfebdd8` CI fix) → squash-merged as `1661276d`.
 
 ## PR Number
-— (chưa tạo PR)
+#7 — MERGED. https://github.com/voidstation-dev/void-melody/pull/7
 
 ## CI Status
-Repo hiện CHỈ có workflow `release.yml` (tag/dispatch). Phase 0 thêm `ci.yml` (PR/push).
-Review chưa verify trên CI vì chưa push.
+Phase 0 CI: Web PASS, API PASS (run 30973560748).
 
 ## Merge SHA
-— (chưa merge)
+`1661276d1e6cdbbc808c18d5b9fb76c0702b67d7`
 
 ## Open Blockers
 - B001 MASTER_PLAN_FILE_MISSING (non-blocking, resolved via D001 — master plan đã tạo)
@@ -85,13 +86,13 @@ Review chưa verify trên CI vì chưa push.
 - B004 (new) TRACKED_BUILD_ARTIFACTS — `apps/web/out/` (36 files), `apps/api/capvoice_api.egg-info/` (5 files) tracked trong repo; .gitignore không cover. Pre-existing hygiene. Follow-up cleanup PR nên tách riêng. Phase 0 ghi nhận, không fix (ngoài scope).
 
 ## Next Action
-1. Khôi phục 7 file bị reviewer stash accident zeroed (ci.yml, eslint.config.mjs, 5 docs) — đang thực hiện.
-2. Revert theme-provider.tsx về main version (BLOCKER 3) — DONE (đã verify tsc pass trên main version).
-3. Cập nhật completion report + decision log cho review findings.
-4. Tạo VIENEU_PHASE_0_REVIEW.md.
-5. Stage CHỈ files Phase 0 scope (explicit git add), tránh build artifacts/DS_Store.
-6. Re-run tất cả gates.
-7. Re-review (round 2) hoặc nếu self-verify OK → commit → push → PR → CI → merge.
+Phase 1 — UI shell (Giọng hiện tại / VieNeu / Giọng nói / Nhân bản giọng):
+1. Tạo branch `feat/vieneu-phase-1-ui-shell` từ main (1661276d).
+2. Thiết kế tab UI: tab "Giọng hiện tại" (giữ nguyên) + tab "VieNeu" (Giọng nói / Nhân bản giọng).
+3. Placeholder/unavailable states cho VieNeu (core chưa có đến Phase 2-5).
+4. KHÔNG trộn voice VieNeu vào CapCut catalog. KHÔNG thay thế tab cũ.
+5. Cân nhắc cleanup PR riêng cho B004 (tracked build artifacts) trước Phase 1.
+6. Gates: typecheck, lint, test, build. Independent review. Commit → PR → CI → merge.
 
 ## Architecture Snapshot (baseline)
 ```
