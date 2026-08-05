@@ -11,6 +11,8 @@ class CreateTTSJobRequest(BaseModel):
     batchId: str | None = Field(default=None)
     batchPosition: int | None = Field(default=None)
     style: str | None = Field(default=None)
+    exportPath: str | None = Field(default=None)
+    exportFormat: str | None = Field(default=None)
 
 
 class TTSPreviewRequest(BaseModel):
@@ -43,6 +45,8 @@ class TTSJobResponse(BaseModel):
     fileSize: int | None = None
     errorCode: str | None = None
     errorMessage: str | None = None
+    exportPath: str | None = None
+    exportFormat: str | None = None
     createdAt: str
     startedAt: str | None = None
     updatedAt: str

@@ -52,3 +52,10 @@ export async function apiFetchBlob(path: string): Promise<Blob> {
   }
   return response.blob()
 }
+
+export async function exportJobAudio(jobId: string, format: string, path: string): Promise<{ status: string; path: string }> {
+  return apiFetch<{ status: string; path: string }>(`/api/v1/jobs/${jobId}/export`, {
+    method: "POST",
+    body: JSON.stringify({ exportPath: path, exportFormat: format }),
+  })
+}

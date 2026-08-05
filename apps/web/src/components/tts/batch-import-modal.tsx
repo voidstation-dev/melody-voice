@@ -11,7 +11,10 @@ import {
   Edit3,
   GripVertical,
   Zap,
+  FolderOutput,
 } from "lucide-react";
+import { useTauri } from "@/contexts/tauri-provider";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   DndContext,
   closestCenter,
@@ -107,7 +110,7 @@ type BatchImportModalProps = {
   isOpen: boolean;
   onClose: () => void;
   files: ImportedTextFile[];
-  onStartJobs: (selectedFiles: ImportedTextFile[]) => void;
+  onStartJobs: (selectedFiles: ImportedTextFile[], exportPath: string | null, exportFormat: "mp3" | "m4a") => void;
 };
 
 export function BatchImportModal({
@@ -120,6 +123,27 @@ export function BatchImportModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activePreviewId, setActivePreviewId] = useState<string | null>(null);
   const [localFiles, setLocalFiles] = useState<ImportedTextFile[]>([]);
+
+  // Export settings
+  const { isDesktop } = useTauri();
+  const [exportPath, setExportPath] = useState<string | null>(null);
+  const [exportFormat, setExportFormat] = useState<"mp3" | "m4a">("mp3");
+
+  const handleSelectFolder = async () => {
+    if (!isDesktop) return;
+    try {
+      const selected = await openDialog({
+        directory: true,
+        multiple: false,
+        title: "Select Export Directory"
+      });
+      if (selected && typeof selected === "string") {
+        setExportPath(selected);
+      }
+    } catch (err) {
+      console.error("Failed to open dialog", err);
+    }
+  };
 
   // Editing state
   const [isEditing, setIsEditing] = useState(false);
@@ -291,7 +315,7 @@ export function BatchImportModal({
     });
 
     const selectedFiles = finalFiles.filter((f) => selectedIds.has(f.id));
-    await onStartJobs(selectedFiles);
+    await onStartJobs(selectedFiles, exportPath, exportFormat);
 
     setIsSubmitting(false);
     isExecutingRef.current = false;
@@ -465,6 +489,65 @@ export function BatchImportModal({
                 <p className="font-medium">Select a file to preview or edit</p>
               </div>
             )}
+          </div>
+          
+          {/* Export Settings */}
+          <div className="shrink-0 p-6 border-t border-border/50 bg-muted/10">
+            <h4 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
+              <FolderOutput className="w-4 h-4 text-primary" />
+              Auto-Export (Optional)
+            </h4>
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground w-16">Format:</span>
+                <div className="flex bg-muted rounded-lg p-1">
+                  <button
+                    onClick={() => setExportFormat("mp3")}
+                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${
+                      exportFormat === "mp3"
+                        ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    MP3
+                  </button>
+                  <button
+                    onClick={() => setExportFormat("m4a")}
+                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${
+                      exportFormat === "m4a"
+                        ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    M4A
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground w-16">Folder:</span>
+                {isDesktop ? (
+                  <div className="flex-1 flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={exportPath || ""}
+                      placeholder="Select output directory..."
+                      className="flex-1 bg-background border border-border rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                    <button
+                      onClick={handleSelectFolder}
+                      className="px-4 py-2 bg-secondary text-secondary-foreground rounded-xl text-sm font-bold hover:brightness-110 transition-all border border-border/50"
+                    >
+                      Browse
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground italic">
+                    Auto-export is only available in the desktop app.
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 

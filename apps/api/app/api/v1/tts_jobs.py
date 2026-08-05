@@ -106,6 +106,8 @@ async def create_job_endpoint(
         "provider_id": getattr(matched, "provider_id", "capcut"),
         "source_file_name": req.sourceFileName,
         "source_file_size": req.sourceFileSize,
+        "export_path": req.exportPath,
+        "export_format": req.exportFormat,
     }
     if req.batchId:
         create_kwargs.update(
@@ -117,6 +119,61 @@ async def create_job_endpoint(
     await queue_manager.enqueue(job.id, batch_position=job.batch_position or 0)
 
     return BatchJobCreateResponse(batchId=batch_id, jobs=[serialize_job(job)])
+
+
+from pydantic import BaseModel
+
+class ExportJobRequest(BaseModel):
+    exportPath: str
+    exportFormat: str = "mp3"
+
+@router.post("/tts/jobs/{job_id}/export")
+async def export_job_endpoint(
+    job_id: str,
+    req: ExportJobRequest,
+    session: AsyncSession = Depends(get_async_session),
+):
+    job = await get_job_by_id(session, job_id)
+    if not job or job.status != "completed" or not job.audio_path:
+        raise HTTPException(status_code=404, detail="AUDIO_NOT_READY")
+
+    try:
+        import shutil
+        import asyncio
+        from pathlib import Path
+        
+        export_file = Path(req.exportPath)
+        export_file.parent.mkdir(parents=True, exist_ok=True)
+
+        if req.exportFormat == "mp3":
+            await asyncio.to_thread(shutil.copy2, job.audio_path, export_file)
+        else:
+            ffmpeg_binary = settings.ffmpeg_binary_path
+            command = [
+                ffmpeg_binary,
+                "-y",
+                "-i",
+                str(job.audio_path),
+                "-c:a",
+                "aac",
+                "-b:a",
+                "256k",
+                str(export_file),
+            ]
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await process.communicate()
+            if process.returncode != 0:
+                raise HTTPException(status_code=500, detail=f"Export failed: {stderr}")
+
+        return {"status": "success", "path": str(export_file)}
+    except Exception as e:
+        logger.error(f"Failed to export job {job_id} to {req.exportPath}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.get("/tts/jobs", response_model=TTSJobListResponse)

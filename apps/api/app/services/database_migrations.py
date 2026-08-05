@@ -81,6 +81,8 @@ POST_BASELINE_COLUMNS = {
     "style",
     "voice_profile_id",
     "request_metadata",
+    "export_path",
+    "export_format",
 }
 
 

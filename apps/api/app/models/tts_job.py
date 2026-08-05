@@ -57,6 +57,8 @@ class TTSJobModel(Base):
     error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    export_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    export_format: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

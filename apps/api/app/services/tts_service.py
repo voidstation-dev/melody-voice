@@ -80,6 +80,8 @@ def _build_tts_job(
     style: str | None = None,
     voice_profile_id: str | None = None,
     request_metadata: str | None = None,
+    export_path: str | None = None,
+    export_format: str | None = None,
 ) -> TTSJobModel:
     cleaned_text = text.strip()
     return TTSJobModel(
@@ -101,6 +103,8 @@ def _build_tts_job(
         style=style,
         voice_profile_id=voice_profile_id,
         request_metadata=request_metadata,
+        export_path=export_path,
+        export_format=export_format,
     )
 
 
@@ -123,6 +127,8 @@ async def create_tts_job(
     style: str | None = None,
     voice_profile_id: str | None = None,
     request_metadata: str | None = None,
+    export_path: str | None = None,
+    export_format: str | None = None,
 ) -> TTSJobModel:
     job = _build_tts_job(
         text=text,
@@ -141,6 +147,8 @@ async def create_tts_job(
         style=style,
         voice_profile_id=voice_profile_id,
         request_metadata=request_metadata,
+        export_path=export_path,
+        export_format=export_format,
     )
     session.add(job)
     await session.commit()
@@ -169,6 +177,8 @@ async def create_tts_job_with_batch_limits(
     style: str | None = None,
     voice_profile_id: str | None = None,
     request_metadata: str | None = None,
+    export_path: str | None = None,
+    export_format: str | None = None,
 ) -> TTSJobModel:
     try:
         # SQLite has no row-level locks. BEGIN IMMEDIATE serializes the
@@ -198,6 +208,8 @@ async def create_tts_job_with_batch_limits(
             style=style,
             voice_profile_id=voice_profile_id,
             request_metadata=request_metadata,
+            export_path=export_path,
+            export_format=export_format,
         )
         session.add(job)
         await session.commit()
