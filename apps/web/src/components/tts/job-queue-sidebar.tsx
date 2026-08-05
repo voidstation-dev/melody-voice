@@ -399,14 +399,33 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
             <div 
               ref={sliderRef}
               className="flex-1 h-2 bg-border/50 rounded-full overflow-hidden cursor-pointer relative group"
-              onClick={(e) => {
+              onPointerDown={(e) => {
                 if (!audioRef.current || !duration) return;
                 const rect = e.currentTarget.getBoundingClientRect();
-                const percent = (e.clientX - rect.left) / rect.width;
-                audioRef.current.currentTime = percent * duration;
-                setCurrentTime(percent * duration);
+                
+                const updatePosition = (clientX: number) => {
+                  let percent = (clientX - rect.left) / rect.width;
+                  percent = Math.max(0, Math.min(1, percent));
+                  const newTime = percent * duration;
+                  if (audioRef.current) audioRef.current.currentTime = newTime;
+                  setCurrentTime(newTime);
+                };
+                
+                updatePosition(e.clientX);
+                
+                const handlePointerMove = (moveEvent: PointerEvent) => {
+                  updatePosition(moveEvent.clientX);
+                };
+                
+                const handlePointerUp = () => {
+                  window.removeEventListener("pointermove", handlePointerMove);
+                  window.removeEventListener("pointerup", handlePointerUp);
+                };
+                
+                window.addEventListener("pointermove", handlePointerMove);
+                window.addEventListener("pointerup", handlePointerUp);
               }}
-              title="Scroll to seek"
+              title="Drag or scroll to seek"
             >
               <div 
                 className="absolute top-0 left-0 h-full bg-primary transition-all duration-100 ease-linear"
