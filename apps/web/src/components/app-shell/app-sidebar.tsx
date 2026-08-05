@@ -17,6 +17,7 @@ import {
   MessageSquare,
   ChevronDown,
   Flame,
+  Sparkles,
 } from "lucide-react";
 
 export function AppSidebar() {
@@ -55,6 +56,7 @@ export function AppSidebar() {
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
         <nav className="space-y-1">
           {navItem("/", "Text to Speech", Mic, true)}
+          {navItem("/vieneu", "VieNeu", Sparkles)}
         </nav>
       </div>
 
