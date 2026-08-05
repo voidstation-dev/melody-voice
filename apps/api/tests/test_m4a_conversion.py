@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from app.utils.audio_utils import convert_mp3_to_m4a
+from app.config import settings
 
 
 class SuccessfulProcess:

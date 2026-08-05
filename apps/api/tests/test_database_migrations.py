@@ -12,7 +12,7 @@ from app.services.database_migrations import (
 )
 
 ALEMBIC_INI = Path(__file__).parents[1] / "alembic.ini"
-HEAD_REVISION = "62f59f77359a"
+HEAD_REVISION = "1570f2fe225e"
 
 
 def sqlite_url(path: Path) -> str:

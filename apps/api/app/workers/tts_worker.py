@@ -396,6 +396,7 @@ async def execute_tts_job_step(
                 job.raw_response_path = str(raw_path)
             logger.error(
                 "TTS job failed",
+                exc_info=True,
                 extra={
                     "job_id": job.id,
                     "batch_id": job.batch_id,

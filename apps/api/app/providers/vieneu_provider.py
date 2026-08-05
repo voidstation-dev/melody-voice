@@ -13,6 +13,7 @@ from vieneu_core.fixtures import FIXTURE_VOICES
 from app.database import AsyncSessionLocal
 from app.models.custom_voice import CustomVoiceModel
 from app.providers.base import ProviderResult, ProviderVoice
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 

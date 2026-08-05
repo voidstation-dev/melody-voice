@@ -4,6 +4,7 @@ from pathlib import Path
 
 from app.exceptions import TTSJobError
 from app.services.audio_storage import validate_audio_file
+from app.config import settings
 
 _conversion_locks: dict[str, asyncio.Lock] = {}
 
