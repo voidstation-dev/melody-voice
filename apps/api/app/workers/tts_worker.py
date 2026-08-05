@@ -5,16 +5,15 @@ import random
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.exceptions import TTSJobError
 from app.models.tts_job import TTSJobModel
 from app.providers.capcut_provider import CapCutProvider
-from app.services.audio_storage import download_audio
-from app.services.audio_storage import validate_audio_file
 from app.services.audio_cleanup import cleanup_job_artifacts
-from app.utils.audio_utils import get_audio_duration
+from app.services.audio_storage import download_audio, validate_audio_file
 from app.services.chunk_executor import (
     ChunkLimitExceeded,
     ChunkResult,
@@ -23,15 +22,15 @@ from app.services.chunk_executor import (
     execute_chunks_bounded,
 )
 from app.services.progress_reporter import ProgressReporter
+from app.services.raw_response_storage import save_failed_provider_response
 from app.services.retry_policy import (
     calculate_retry_delay,
     map_download_error,
     map_provider_error,
 )
-from app.utils.text_utils import split_text_into_chunks
 from app.services.tts_service import claim_job
-from app.services.raw_response_storage import save_failed_provider_response
-
+from app.utils.audio_utils import get_audio_duration
+from app.utils.text_utils import split_text_into_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +39,11 @@ async def process_chunk(
     *,
     index: int,
     text: str,
-    provider: CapCutProvider,
+    provider: Any,
     job: JobSnapshot,
 ) -> ChunkResult:
     try:
-        result = await asyncio.to_thread(
-            provider.synthesize,
+        result = await provider.synthesize(
             text=text,
             voice_type=job.voice_type,
             resource_id=job.resource_id,
@@ -54,20 +52,26 @@ async def process_chunk(
     except Exception as exc:
         raise map_provider_error(exc) from exc
 
-    if not result.audio_urls:
+    if not result.audio_urls and not result.local_paths:
         raise TTSJobError(
             code="AUDIO_URL_NOT_FOUND",
-            message=f"No playable audio URL extracted for chunk {index}",
+            message=f"No playable audio URL or local path extracted for chunk {index}",
             retryable=False,
         )
 
     destination = settings.audio_storage_dir / f"{job.id}_part{index}.mp3"
     try:
-        mime_type, size = await download_audio(
-            url=result.audio_urls[0],
-            destination=destination,
-            max_bytes=settings.tts_audio_max_bytes,
-        )
+        if result.local_paths and len(result.local_paths) > 0:
+            import shutil
+            shutil.move(str(result.local_paths[0]), str(destination))
+            mime_type = "audio/mpeg"
+            size = destination.stat().st_size
+        else:
+            mime_type, size = await download_audio(
+                url=result.audio_urls[0],
+                destination=destination,
+                max_bytes=settings.tts_audio_max_bytes,
+            )
     except Exception as exc:
         raise map_download_error(exc) from exc
     return ChunkResult(
@@ -143,7 +147,7 @@ async def combine_audio_parts(
 async def execute_tts_job_step(
     job_id: str,
     *,
-    provider: CapCutProvider | None = None,
+    provider_registry: dict[str, Any] | None = None,
     worker_id: int = 0,
 ) -> None:
     started_monotonic = time.monotonic()
@@ -154,9 +158,13 @@ async def execute_tts_job_step(
         if not job:
             return
 
-        active_provider = provider or CapCutProvider(
-            catalog_path=settings.capcut_catalog_path
-        )
+        active_provider = None
+        if provider_registry:
+            active_provider = provider_registry.get(job.provider_id)
+        if not active_provider:
+            active_provider = CapCutProvider(
+                catalog_path=settings.capcut_catalog_path
+            )
         downloaded_files: list[Path] = []
         final_destination = settings.audio_storage_dir / f"{job.id}.mp3"
         raw_responses: list[dict | None] = []

@@ -2,7 +2,6 @@ import json
 from typing import Any
 from urllib.parse import urlparse
 
-
 AUDIO_KEY_PRIORITY = {
     "speech_url": 0,
     "speechUrl": 0,

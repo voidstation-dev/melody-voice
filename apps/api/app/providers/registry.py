@@ -13,7 +13,6 @@ from dataclasses import dataclass
 
 from vieneu_core import default_descriptor as vieneu_default_descriptor
 
-
 # Stable provider ids. These are stored on tts_jobs.provider_id.
 CAPCUT = "capcut"
 VIENEU = "vieneu"

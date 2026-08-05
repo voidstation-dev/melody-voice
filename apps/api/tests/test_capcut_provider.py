@@ -1,6 +1,7 @@
 from pathlib import Path
-import pytest
+
 from app.providers.capcut_provider import CapCutProvider
+
 
 def test_list_voices_from_dummy_catalog(tmp_path: Path):
     catalog_file = tmp_path / "Voice.json"

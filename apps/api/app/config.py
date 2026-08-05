@@ -1,7 +1,7 @@
-from pathlib import Path
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
 import os
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Helper to get paths
 _data_dir = Path(os.environ.get("MELODY_DATA_DIR", "../../data"))

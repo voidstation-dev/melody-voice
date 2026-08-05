@@ -12,7 +12,6 @@ from app.database import AsyncSessionLocal
 from app.services.voice_catalog import voice_catalog
 from app.workers.queue_manager import queue_manager
 
-
 router = APIRouter()
 
 

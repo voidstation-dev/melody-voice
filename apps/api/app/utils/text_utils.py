@@ -1,5 +1,6 @@
 import re
 
+
 def split_text_into_chunks(text: str, max_chars: int = 450) -> list[str]:
     """
     Splits a long text into chunks of maximum max_chars characters.

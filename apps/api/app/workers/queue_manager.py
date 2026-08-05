@@ -1,14 +1,13 @@
 import asyncio
 import logging
-from collections.abc import Callable
 from typing import Any
 
 from app.config import settings
 from app.providers.capcut_provider import CapCutProvider
+from app.providers.vieneu_provider import VieneuProvider
 from app.services.job_recovery import requeue_interrupted_job
 from app.services.provider_circuit_breaker import ProviderCircuitBreaker
 from app.workers.tts_worker import execute_tts_job_step
-
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +17,7 @@ class TTSQueueManager:
         self,
         concurrency: int = 2,
         *,
-        provider_factory: Callable[[], Any] | None = None,
+        provider_registry: dict[str, Any] | None = None,
         circuit_breaker: ProviderCircuitBreaker | None = None,
         shutdown_grace_seconds: float | None = None,
     ):
@@ -31,13 +30,14 @@ class TTSQueueManager:
             window_seconds=settings.tts_circuit_breaker_window_seconds,
             cooldown_seconds=settings.tts_circuit_breaker_cooldown_seconds,
         )
-        self.provider_factory = provider_factory or (
-            lambda: CapCutProvider(
+        self.provider_registry = provider_registry or {
+            "capcut": CapCutProvider(
                 catalog_path=settings.capcut_catalog_path,
                 timeout_seconds=settings.tts_provider_timeout_seconds,
                 circuit_breaker=self.circuit_breaker,
-            )
-        )
+            ),
+            "vieneu": VieneuProvider(),
+        }
         self.shutdown_grace_seconds = (
             settings.tts_queue_shutdown_grace_seconds
             if shutdown_grace_seconds is None
@@ -139,7 +139,6 @@ class TTSQueueManager:
         }
 
     async def _worker(self, worker_id: int) -> None:
-        provider = self.provider_factory()
         logger.info("TTS queue worker %s started", worker_id)
         while True:
             try:
@@ -150,7 +149,7 @@ class TTSQueueManager:
             try:
                 await execute_tts_job_step(
                     job_id,
-                    provider=provider,
+                    provider_registry=self.provider_registry,
                     worker_id=worker_id,
                 )
             except asyncio.CancelledError:

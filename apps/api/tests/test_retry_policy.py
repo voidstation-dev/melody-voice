@@ -1,5 +1,5 @@
-import requests
 import httpx
+import requests
 from capcut_tts_api.exceptions import CapCutAPIError, CapCutTaskError
 
 from app.exceptions import TTSJobError

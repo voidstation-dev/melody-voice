@@ -1,8 +1,7 @@
 import json
-from pathlib import Path
 import time
+from pathlib import Path
 from typing import Any
-
 
 SENSITIVE_KEY_PARTS = (
     "token",

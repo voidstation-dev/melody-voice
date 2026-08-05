@@ -1,19 +1,21 @@
+import asyncio
+import logging
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import logging
+
 from app.api.v1.router import api_router
 from app.config import settings
-from app.services.database_migrations import run_database_migrations
-from app.services.job_recovery import recover_jobs
+from app.middleware.local_auth import LocalAuthMiddleware, validate_runtime_security
 from app.services.audio_cleanup import cleanup_stale_temp_files
 from app.services.audio_storage import close_http_client
+from app.services.database_migrations import run_database_migrations
+from app.services.job_recovery import recover_jobs
 from app.services.logging_config import configure_logging
 from app.services.raw_response_storage import cleanup_stale_raw_responses
-from app.middleware.local_auth import LocalAuthMiddleware, validate_runtime_security
-import asyncio
-
 from app.workers.queue_manager import queue_manager
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -55,9 +57,10 @@ app.add_middleware(
 app.include_router(api_router, prefix="/api/v1")
 
 if __name__ == "__main__":
-    import uvicorn
     import multiprocessing
     import sys
+
+    import uvicorn
     
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(line_buffering=True)

@@ -1,12 +1,18 @@
 from pathlib import Path
+
+import httpx
 import pytest
 import respx
 from httpx import Response
-from app.services.audio_storage import download_audio
-from app.services.audio_storage import close_http_client, validate_audio_file
+
 from app.exceptions import TTSJobError
-import app.services.audio_storage as audio_storage
-import httpx
+from app.services import audio_storage
+from app.services.audio_storage import (
+    close_http_client,
+    download_audio,
+    validate_audio_file,
+)
+
 
 @pytest.mark.asyncio
 @respx.mock

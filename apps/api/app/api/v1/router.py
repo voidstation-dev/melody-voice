@@ -1,5 +1,6 @@
 from fastapi import APIRouter
-from app.api.v1 import health, voices, tts_jobs
+
+from app.api.v1 import health, tts_jobs, voices
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["Health"])

@@ -33,10 +33,10 @@ class CapCutProvider:
             return CapCutClient()
         return CapCutClient(device=device_path)
 
-    def list_voices(self, language: str | None = None) -> list[ProviderVoice]:
+    async def list_voices(self, language: str | None = None) -> list[ProviderVoice]:
         return self.catalog.list_voices(language)
 
-    def synthesize(
+    async def synthesize(
         self,
         *,
         text: str,
@@ -44,10 +44,12 @@ class CapCutProvider:
         resource_id: str | None,
         rate: float,
     ) -> ProviderResult:
+        import asyncio
         if self.circuit_breaker is not None:
             self.circuit_breaker.before_call()
         try:
-            response: dict[str, Any] = self.client.generate_speech(
+            response = await asyncio.to_thread(
+                self.client.generate_speech,
                 texts=text,
                 voice=voice_type,
                 resource_id=resource_id,

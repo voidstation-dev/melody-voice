@@ -1,7 +1,6 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
@@ -23,9 +22,8 @@ from pathlib import Path
 # Add apps/api to path so we can import app
 sys.path.append(str(Path(__file__).parent.parent))
 
-from app.database import Base
 from app.config import settings
-from app.models.tts_job import TTSJobModel # ensure models are loaded
+from app.database import Base
 
 runtime_database_url = config.attributes.get(
     "database_url",

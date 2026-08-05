@@ -1,10 +1,13 @@
-import json
 import subprocess
-from capcut_tts_api import CapCutClient
 import sys
+
+from capcut_tts_api import CapCutClient
+
 sys.path.append('.')
-from app.services.provider_response_parser import extract_audio_urls
 import os
+
+from app.services.provider_response_parser import extract_audio_urls
+
 
 def get_duration(url):
     ffmpeg_cmd = os.environ.get("FFMPEG_BINARY_PATH", "ffprobe")

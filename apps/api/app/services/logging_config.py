@@ -2,7 +2,6 @@ import json
 import logging
 from datetime import datetime, timezone
 
-
 STRUCTURED_FIELDS = (
     "job_id",
     "batch_id",

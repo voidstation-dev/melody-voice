@@ -1909,11 +1909,19 @@ gpu = [
 name = "vieneu-core"
 version = "0.1.0"
 source = { directory = "../../packages/vieneu-core" }
+dependencies = [
+    { name = "huggingface-hub" },
+]
 
 [package.metadata]
+requires-dist = [{ name = "huggingface-hub", specifier = ">=0.20" }]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8.0.0" }]
+dev = [
+    { name = "mypy", specifier = ">=2.3.0" },
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23.0" },
+]
 
 [[package]]
 name = "watchfiles"

@@ -2,10 +2,10 @@ import asyncio
 import threading
 import time
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 import requests
-from unittest.mock import AsyncMock
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings

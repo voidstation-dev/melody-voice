@@ -1,12 +1,14 @@
 import hashlib
-from datetime import datetime, timezone
-from typing import Sequence
+from collections.abc import Sequence
+
 from fastapi import HTTPException
-from sqlalchemy import select, func, text as sql_text, update
+from sqlalchemy import func, select, update
+from sqlalchemy import text as sql_text
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.tts_job import TTSJobModel
+
 from app.config import settings
-from app.models.tts_job import utc_now
+from app.models.tts_job import TTSJobModel, utc_now
+
 
 def compute_text_hash(text: str) -> str:
     return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
