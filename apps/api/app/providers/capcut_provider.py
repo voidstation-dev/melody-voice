@@ -43,8 +43,10 @@ class CapCutProvider:
         voice_type: str,
         resource_id: str | None,
         rate: float,
+        style: str | None = None,
     ) -> ProviderResult:
         import asyncio
+
         if self.circuit_breaker is not None:
             self.circuit_breaker.before_call()
         try:

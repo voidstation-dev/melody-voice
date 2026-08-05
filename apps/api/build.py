@@ -24,19 +24,25 @@ def get_target_triple():
 def get_pyinstaller_command() -> list[str]:
     return [
         "pyinstaller",
-        "--name", "melody-api",
-        "--paths", ".",
+        "--name",
+        "melody-api",
+        "--paths",
+        ".",
         "--hidden-import=aiosqlite",
         "--hidden-import=app.utils.audio_utils",
         "--hidden-import=vieneu_core",
-        "--add-data", "alembic.ini:.",
-        "--add-data", "alembic:alembic",
+        "--add-data",
+        "alembic.ini:.",
+        "--add-data",
+        "alembic:alembic",
         "--onefile",
         "--clean",
         "--noconfirm",
-        "--distpath", "./dist",
+        "--distpath",
+        "./dist",
         "app/main.py",
     ]
+
 
 def main():
     target_triple = get_target_triple()
@@ -60,6 +66,7 @@ def main():
     print(f"Copying {src_bin} to {dest_bin}")
     shutil.copy2(src_bin, dest_bin)
     print("Done!")
+
 
 if __name__ == "__main__":
     main()

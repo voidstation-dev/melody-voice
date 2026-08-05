@@ -6,5 +6,6 @@ class ErrorDetail(BaseModel):
     message: str
     requestId: str | None = None
 
+
 class ErrorResponse(BaseModel):
     error: ErrorDetail

@@ -21,8 +21,7 @@ async def claim_job(session: AsyncSession, job_id: str) -> bool:
             TTSJobModel.id == job_id,
             TTSJobModel.status == "queued",
             TTSJobModel.cancel_requested.is_(False),
-            TTSJobModel.attempt_count
-            < settings.tts_max_auto_retries + 1,
+            TTSJobModel.attempt_count < settings.tts_max_auto_retries + 1,
         )
         .values(
             status="processing",
@@ -103,6 +102,7 @@ def _build_tts_job(
         voice_profile_id=voice_profile_id,
         request_metadata=request_metadata,
     )
+
 
 async def create_tts_job(
     session: AsyncSession,
@@ -207,8 +207,10 @@ async def create_tts_job_with_batch_limits(
         await session.rollback()
         raise
 
+
 async def get_job_by_id(session: AsyncSession, job_id: str) -> TTSJobModel | None:
     return await session.get(TTSJobModel, job_id)
+
 
 async def list_jobs(
     session: AsyncSession,

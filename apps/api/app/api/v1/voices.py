@@ -5,6 +5,7 @@ from app.services.voice_catalog import voice_catalog
 
 router = APIRouter()
 
+
 @router.get("/voices", response_model=VoiceListResponse)
 async def list_voices(
     language: str | None = Query(default=None),
@@ -13,10 +14,14 @@ async def list_voices(
     page_size: int = Query(default=50, ge=1, le=100),
 ):
     raw_voices = voice_catalog.list_voices(language=language)
-    
+
     if q:
         query_str = q.lower()
-        raw_voices = [v for v in raw_voices if query_str in v.display_name.lower() or query_str in v.voice_type.lower()]
+        raw_voices = [
+            v
+            for v in raw_voices
+            if query_str in v.display_name.lower() or query_str in v.voice_type.lower()
+        ]
 
     total = len(raw_voices)
     start = (page - 1) * page_size
@@ -29,6 +34,7 @@ async def list_voices(
             displayName=v.display_name,
             resourceId=v.resource_id,
             capturedAt=v.captured_at,
+            providerId=v.provider_id,
         )
         for v in raw_voices[start : start + page_size]
     ]

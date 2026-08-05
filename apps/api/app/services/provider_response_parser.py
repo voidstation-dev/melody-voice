@@ -48,9 +48,7 @@ def extract_audio_urls(payload: Any) -> list[str]:
                     and isinstance(decoded, str)
                     and _is_http_url(decoded)
                 ):
-                    candidates.append(
-                        (AUDIO_KEY_PRIORITY[key], order, decoded)
-                    )
+                    candidates.append((AUDIO_KEY_PRIORITY[key], order, decoded))
                     order += 1
                 walk(decoded, key)
         elif isinstance(node, list):

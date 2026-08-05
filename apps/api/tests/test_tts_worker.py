@@ -168,7 +168,9 @@ async def test_worker_retries_timeout_twice_then_fails(
     provider = TimeoutProvider()
     delayed_enqueue = AsyncMock()
     worker_sleep = AsyncMock()
-    monkeypatch.setattr("app.workers.tts_worker.AsyncSessionLocal", async_session_factory)
+    monkeypatch.setattr(
+        "app.workers.tts_worker.AsyncSessionLocal", async_session_factory
+    )
     monkeypatch.setattr(
         "app.workers.queue_manager.queue_manager.enqueue_after",
         delayed_enqueue,
@@ -243,7 +245,9 @@ async def test_worker_applies_rate_in_exactly_one_stage(
         destination.write_bytes(b"ID3combined")
 
     provider = SuccessfulProvider()
-    monkeypatch.setattr("app.workers.tts_worker.AsyncSessionLocal", async_session_factory)
+    monkeypatch.setattr(
+        "app.workers.tts_worker.AsyncSessionLocal", async_session_factory
+    )
     monkeypatch.setattr("app.workers.tts_worker.download_audio", fake_download)
     monkeypatch.setattr("app.workers.tts_worker.combine_audio_parts", fake_combine)
     monkeypatch.setattr(settings, "audio_storage_dir", tmp_path)
@@ -292,10 +296,16 @@ async def test_ffmpeg_failure_does_not_retry_provider(
 
     provider = SuccessfulProvider()
     delayed_enqueue = AsyncMock()
-    monkeypatch.setattr("app.workers.tts_worker.AsyncSessionLocal", async_session_factory)
+    monkeypatch.setattr(
+        "app.workers.tts_worker.AsyncSessionLocal", async_session_factory
+    )
     monkeypatch.setattr("app.workers.tts_worker.download_audio", fake_download)
     monkeypatch.setattr("app.workers.tts_worker.combine_audio_parts", fail_combine)
-    monkeypatch.setattr("app.workers.queue_manager.queue_manager.enqueue_after", delayed_enqueue, raising=False)
+    monkeypatch.setattr(
+        "app.workers.queue_manager.queue_manager.enqueue_after",
+        delayed_enqueue,
+        raising=False,
+    )
     monkeypatch.setattr(settings, "audio_storage_dir", tmp_path)
 
     await execute_tts_job_step(job_id, provider=provider)
@@ -335,7 +345,9 @@ async def test_invalid_final_output_is_failed_and_removed(
     async def invalid_combine(*, parts, destination, rate):
         destination.write_bytes(b"not audio")
 
-    monkeypatch.setattr("app.workers.tts_worker.AsyncSessionLocal", async_session_factory)
+    monkeypatch.setattr(
+        "app.workers.tts_worker.AsyncSessionLocal", async_session_factory
+    )
     monkeypatch.setattr("app.workers.tts_worker.download_audio", fake_download)
     monkeypatch.setattr("app.workers.tts_worker.combine_audio_parts", invalid_combine)
     monkeypatch.setattr(settings, "audio_storage_dir", tmp_path)
@@ -378,7 +390,9 @@ async def test_successful_job_does_not_persist_raw_provider_response(
         destination.write_bytes(b"ID3combined")
 
     raw_directory = tmp_path / "raw"
-    monkeypatch.setattr("app.workers.tts_worker.AsyncSessionLocal", async_session_factory)
+    monkeypatch.setattr(
+        "app.workers.tts_worker.AsyncSessionLocal", async_session_factory
+    )
     monkeypatch.setattr("app.workers.tts_worker.download_audio", fake_download)
     monkeypatch.setattr("app.workers.tts_worker.combine_audio_parts", fake_combine)
     monkeypatch.setattr(settings, "audio_storage_dir", tmp_path)

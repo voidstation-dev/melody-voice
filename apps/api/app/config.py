@@ -6,14 +6,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Helper to get paths
 _data_dir = Path(os.environ.get("MELODY_DATA_DIR", "../../data"))
 _data_dir.mkdir(parents=True, exist_ok=True)
-_catalog_path = Path(os.environ.get("MELODY_CATALOG_PATH", "../../vendor/capcut-tts-api/Voice.json"))
+_catalog_path = Path(
+    os.environ.get("MELODY_CATALOG_PATH", "../../vendor/capcut-tts-api/Voice.json")
+)
+
 
 class Settings(BaseSettings):
     app_env: str = "development"
     api_host: str = "127.0.0.1"
     api_port: int = int(os.environ.get("API_PORT", 8000))
     melody_api_token: str | None = None
-    cors_origins: list[str] = ["*"] # Allow electron origins like file:// or app://
+    cors_origins: list[str] = ["*"]  # Allow electron origins like file:// or app://
     database_url: str = f"sqlite+aiosqlite:///{_data_dir}/app.db"
     audio_storage_dir: Path = _data_dir / "audio"
     preview_storage_dir: Path = _data_dir / "previews"
@@ -43,5 +46,6 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
 
 settings = Settings()

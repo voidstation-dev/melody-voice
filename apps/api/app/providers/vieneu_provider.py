@@ -11,6 +11,7 @@ from app.providers.base import ProviderResult, ProviderVoice
 
 logger = logging.getLogger(__name__)
 
+
 class VieneuProvider:
     def __init__(self):
         self.manager = ModelManager()
@@ -24,6 +25,7 @@ class VieneuProvider:
                 voice_type=v.voice_id,
                 display_name=v.display_name,
                 resource_id=None,
+                provider_id="vieneu",
             )
             for v in FIXTURE_VOICES
         ]
@@ -35,38 +37,41 @@ class VieneuProvider:
         voice_type: str,
         resource_id: str | None,
         rate: float,
+        style: str | None = None,
     ) -> ProviderResult:
         logger.info("VieneuProvider synthesizing %s", voice_type)
         engine = await self.manager.get_engine()
-        
+
         # inference is cpu bound, run in thread behind semaphore
         async with self._inference_semaphore:
             wav = await asyncio.to_thread(
                 engine.infer,
                 text=text,
                 voice=voice_type,
-                style="tu_nhien",
+                style=style or "tu_nhien",
                 apply_watermark=False,
             )
-        
+
         fd, wav_path_str = tempfile.mkstemp(suffix=".wav")
         os.close(fd)
         wav_path = Path(wav_path_str)
-        
+
         try:
             await asyncio.to_thread(engine.save, wav, wav_path)
-            
+
             mp3_path = wav_path.with_suffix(".mp3")
             ffmpeg_binary = os.environ.get("FFMPEG_BINARY_PATH", "ffmpeg")
-            
+
             command = [
                 ffmpeg_binary,
                 "-y",
-                "-i", str(wav_path),
-                "-q:a", "2",
-                str(mp3_path)
+                "-i",
+                str(wav_path),
+                "-q:a",
+                "2",
+                str(mp3_path),
             ]
-            
+
             process = await asyncio.create_subprocess_exec(
                 *command,
                 stdout=asyncio.subprocess.PIPE,
@@ -74,8 +79,10 @@ class VieneuProvider:
             )
             _, stderr = await process.communicate()
             if process.returncode != 0:
-                raise RuntimeError(f"FFmpeg conversion failed: {stderr.decode('utf-8', errors='ignore')}")
-                
+                raise RuntimeError(
+                    f"FFmpeg conversion failed: {stderr.decode('utf-8', errors='ignore')}"
+                )
+
             return ProviderResult(
                 raw_response={"engine": "vieneu-v3-turbo", "voice": voice_type},
                 audio_urls=[],

@@ -111,9 +111,7 @@ async def download_audio(
         async with client.stream("GET", url) as response:
             response.raise_for_status()
             content_type = (
-                response.headers.get("content-type", "")
-                .split(";")[0]
-                .lower()
+                response.headers.get("content-type", "").split(";")[0].lower()
             )
             if content_type and content_type not in ALLOWED_CONTENT_TYPES:
                 raise ValueError(f"Unexpected content type: {content_type}")

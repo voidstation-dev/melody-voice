@@ -10,6 +10,8 @@ class CreateTTSJobRequest(BaseModel):
     sourceFileSize: int | None = Field(default=None)
     batchId: str | None = Field(default=None)
     batchPosition: int | None = Field(default=None)
+    style: str | None = Field(default=None)
+
 
 class TTSJobResponse(BaseModel):
     id: str
@@ -24,6 +26,7 @@ class TTSJobResponse(BaseModel):
     progress: int | None = None
     batchId: str | None = None
     batchPosition: int | None = None
+    style: str | None = None
     sourceFileName: str | None = None
     sourceFileSize: int | None = None
     audioUrl: str | None = None
@@ -37,9 +40,11 @@ class TTSJobResponse(BaseModel):
     updatedAt: str
     completedAt: str | None = None
 
+
 class BatchJobCreateResponse(BaseModel):
     batchId: str
     jobs: list[TTSJobResponse]
+
 
 class TTSJobListResponse(BaseModel):
     items: list[TTSJobResponse]

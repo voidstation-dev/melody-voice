@@ -11,6 +11,7 @@ class JobSnapshot:
     voice_type: str
     resource_id: str | None
     rate: float
+    style: str | None = None
 
 
 @dataclass(frozen=True)
@@ -24,9 +25,7 @@ class ChunkResult:
 
 class ChunkLimitExceeded(ValueError):
     def __init__(self, *, actual: int, maximum: int):
-        super().__init__(
-            f"The job creates {actual} chunks; maximum is {maximum}."
-        )
+        super().__init__(f"The job creates {actual} chunks; maximum is {maximum}.")
         self.actual = actual
         self.maximum = maximum
 

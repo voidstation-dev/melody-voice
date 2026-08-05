@@ -10,6 +10,7 @@ the correct TTS provider (CapCut legacy or VieNeu). Existing rows
 automatically receive provider_id='capcut' via the column server default, so
 old jobs keep their provider and retry behavior.
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa

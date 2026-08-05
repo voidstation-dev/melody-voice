@@ -48,6 +48,7 @@ async def process_chunk(
             voice_type=job.voice_type,
             resource_id=job.resource_id,
             rate=job.rate,
+            style=job.style,
         )
     except Exception as exc:
         raise map_provider_error(exc) from exc
@@ -63,6 +64,7 @@ async def process_chunk(
     try:
         if result.local_paths and len(result.local_paths) > 0:
             import shutil
+
             shutil.move(str(result.local_paths[0]), str(destination))
             mime_type = "audio/mpeg"
             size = destination.stat().st_size
@@ -162,9 +164,7 @@ async def execute_tts_job_step(
         if provider_registry:
             active_provider = provider_registry.get(job.provider_id)
         if not active_provider:
-            active_provider = CapCutProvider(
-                catalog_path=settings.capcut_catalog_path
-            )
+            active_provider = CapCutProvider(catalog_path=settings.capcut_catalog_path)
         downloaded_files: list[Path] = []
         final_destination = settings.audio_storage_dir / f"{job.id}.mp3"
         raw_responses: list[dict | None] = []
@@ -193,17 +193,12 @@ async def execute_tts_job_step(
                 id=job.id,
                 voice_type=job.voice_type,
                 resource_id=job.resource_id,
-                rate=(
-                    1.0
-                    if settings.tts_apply_rate_with_ffmpeg
-                    else job.rate
-                ),
+                style=job.style,
+                rate=(1.0 if settings.tts_apply_rate_with_ffmpeg else job.rate),
             )
             raw_responses = [None] * len(chunks)
             progress_reporter = ProgressReporter(
-                commit_interval_seconds=(
-                    settings.tts_progress_commit_interval_seconds
-                ),
+                commit_interval_seconds=(settings.tts_progress_commit_interval_seconds),
                 commit_step_percent=settings.tts_progress_commit_step_percent,
             )
 
@@ -231,17 +226,11 @@ async def execute_tts_job_step(
                     job.progress = int((completed / len(chunks)) * 90)
                     await session.commit()
 
-            downloaded_files.sort(
-                key=lambda path: int(path.stem.rsplit("part", 1)[1])
-            )
+            downloaded_files.sort(key=lambda path: int(path.stem.rsplit("part", 1)[1]))
             await combine_audio_parts(
                 parts=downloaded_files,
                 destination=final_destination,
-                rate=(
-                    job.rate
-                    if settings.tts_apply_rate_with_ffmpeg
-                    else 1.0
-                ),
+                rate=(job.rate if settings.tts_apply_rate_with_ffmpeg else 1.0),
             )
             for part in downloaded_files:
                 part.unlink(missing_ok=True)
@@ -250,7 +239,7 @@ async def execute_tts_job_step(
                 final_destination,
                 mime_type="audio/mpeg",
             )
-            
+
             audio_duration = await get_audio_duration(final_destination)
 
             job.status = "completed"
@@ -271,9 +260,7 @@ async def execute_tts_job_step(
                     "voice_type": job.voice_type,
                     "text_length": len(job.text),
                     "status": "completed",
-                    "duration_ms": int(
-                        (time.monotonic() - started_monotonic) * 1000
-                    ),
+                    "duration_ms": int((time.monotonic() - started_monotonic) * 1000),
                 },
             )
 
@@ -293,10 +280,7 @@ async def execute_tts_job_step(
                     retryable=False,
                 )
 
-            if (
-                error.retryable
-                and job.attempt_count <= settings.tts_max_auto_retries
-            ):
+            if error.retryable and job.attempt_count <= settings.tts_max_auto_retries:
                 job.status = "queued"
                 job.progress = 0
                 job.started_at = None
@@ -353,9 +337,7 @@ async def execute_tts_job_step(
                     "voice_type": job.voice_type,
                     "text_length": len(job.text),
                     "status": "failed",
-                    "duration_ms": int(
-                        (time.monotonic() - started_monotonic) * 1000
-                    ),
+                    "duration_ms": int((time.monotonic() - started_monotonic) * 1000),
                     "error_code": error.code,
                 },
             )

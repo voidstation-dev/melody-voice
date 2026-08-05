@@ -45,10 +45,26 @@ class VoiceCatalog:
                     )
                 )
 
+            # Append VieNeu fixture voices
+            try:
+                from vieneu_core.fixtures import FIXTURE_VOICES
+
+                for v in FIXTURE_VOICES:
+                    voices.append(
+                        ProviderVoice(
+                            language_short="vi",
+                            language_code="vi-VN",
+                            voice_type=v.voice_id,
+                            display_name=v.display_name,
+                            resource_id=None,
+                            provider_id="vieneu",
+                        )
+                    )
+            except ImportError:
+                pass
+
             self._voices = tuple(voices)
-            self._by_voice_type = {
-                voice.voice_type: voice for voice in voices
-            }
+            self._by_voice_type = {voice.voice_type: voice for voice in voices}
             self._mtime_ns = mtime_ns
 
     def get_voice(self, voice_type: str) -> ProviderVoice | None:

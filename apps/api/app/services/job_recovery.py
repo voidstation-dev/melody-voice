@@ -18,9 +18,7 @@ async def recover_jobs(
     )
     async with session_factory() as session:
         result = await session.execute(
-            select(TTSJobModel).where(
-                TTSJobModel.status.in_(["queued", "processing"])
-            )
+            select(TTSJobModel).where(TTSJobModel.status.in_(["queued", "processing"]))
         )
         jobs = result.scalars().all()
         recovered_ids: list[str] = []

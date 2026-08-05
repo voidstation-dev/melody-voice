@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
         await queue_manager.stop()
         await close_http_client()
 
+
 app = FastAPI(title="CapVoice Studio API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(LocalAuthMiddleware)
@@ -61,7 +62,7 @@ if __name__ == "__main__":
     import sys
 
     import uvicorn
-    
+
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(line_buffering=True)
     if hasattr(sys.stderr, "reconfigure"):
@@ -74,4 +75,10 @@ if __name__ == "__main__":
         settings.api_host,
         settings.api_port,
     )
-    uvicorn.run(app, host=settings.api_host, port=settings.api_port, reload=False, log_level="info")
+    uvicorn.run(
+        app,
+        host=settings.api_host,
+        port=settings.api_port,
+        reload=False,
+        log_level="info",
+    )

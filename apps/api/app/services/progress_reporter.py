@@ -28,17 +28,13 @@ class ProgressReporter:
         progress = min(90, int((completed / total) * 90))
         reached_final_chunk_progress = progress == 90
         enough_progress = (
-            progress - self._last_committed_percent
-            >= self.commit_step_percent
+            progress - self._last_committed_percent >= self.commit_step_percent
         )
         enough_time = (
-            current_time - self._last_commit_at
-            >= self.commit_interval_seconds
+            current_time - self._last_commit_at >= self.commit_interval_seconds
         )
 
-        if not reached_final_chunk_progress and not (
-            enough_progress and enough_time
-        ):
+        if not reached_final_chunk_progress and not (enough_progress and enough_time):
             return False
         if progress <= self._last_committed_percent:
             return False

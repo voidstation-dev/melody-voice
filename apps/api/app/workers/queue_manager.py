@@ -24,9 +24,7 @@ class TTSQueueManager:
         self.queue: asyncio.Queue[str] = asyncio.Queue()
         self.concurrency = concurrency
         self.circuit_breaker = circuit_breaker or ProviderCircuitBreaker(
-            failure_threshold=(
-                settings.tts_circuit_breaker_failure_threshold
-            ),
+            failure_threshold=(settings.tts_circuit_breaker_failure_threshold),
             window_seconds=settings.tts_circuit_breaker_window_seconds,
             cooldown_seconds=settings.tts_circuit_breaker_cooldown_seconds,
         )
@@ -131,9 +129,7 @@ class TTSQueueManager:
         return {
             "accepting_jobs": self.accepting_jobs,
             "worker_count": self.concurrency,
-            "workers_alive": sum(
-                1 for worker in self.workers if not worker.done()
-            ),
+            "workers_alive": sum(1 for worker in self.workers if not worker.done()),
             "queue_depth": self.queue.qsize(),
             "circuit_breaker": self.circuit_breaker.snapshot(),
         }

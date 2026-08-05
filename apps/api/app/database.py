@@ -24,6 +24,7 @@ def create_database_engine(database_url: str) -> AsyncEngine:
     )
 
     if database_url.startswith("sqlite"):
+
         @event.listens_for(database_engine.sync_engine, "connect")
         def configure_sqlite_connection(dbapi_connection, connection_record):
             del connection_record

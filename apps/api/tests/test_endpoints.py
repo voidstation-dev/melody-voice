@@ -12,7 +12,9 @@ from app.models.tts_job import TTSJobModel
 
 @pytest.mark.asyncio
 async def test_health_endpoint():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
         res = await ac.get("/api/v1/health")
         assert res.status_code == 200
         data = res.json()

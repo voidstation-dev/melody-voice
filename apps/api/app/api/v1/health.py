@@ -72,8 +72,7 @@ async def readiness_check():
 
     queue = queue_manager.health_snapshot()
     queue_ok = bool(
-        queue["accepting_jobs"]
-        and queue["workers_alive"] == queue["worker_count"]
+        queue["accepting_jobs"] and queue["workers_alive"] == queue["worker_count"]
     )
     circuit = queue["circuit_breaker"]
     circuit_ok = circuit["state"] != "open"

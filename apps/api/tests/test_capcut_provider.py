@@ -12,7 +12,7 @@ def test_list_voices_from_dummy_catalog(tmp_path: Path):
 
     provider = CapCutProvider(catalog_path=catalog_file)
     voices = provider.list_voices()
-    
+
     assert len(voices) == 1
     assert voices[0].display_name == "Nhỏ Ngọt Ngào"
     assert voices[0].voice_type == "BV421_vivn_streaming"

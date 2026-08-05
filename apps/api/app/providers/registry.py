@@ -33,7 +33,9 @@ class Capabilities:
     supports_batch: bool = True
     supports_emotion_tags: bool = False
     max_text_chars: int | None = None
-    sample_rate: int | None = None  # CapCut audio format is server-side; not a fixed rate here
+    sample_rate: int | None = (
+        None  # CapCut audio format is server-side; not a fixed rate here
+    )
 
 
 @dataclass(frozen=True)
