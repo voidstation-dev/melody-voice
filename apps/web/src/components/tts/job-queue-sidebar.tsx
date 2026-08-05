@@ -1,6 +1,6 @@
 "use client";
 import { useQueue } from "@/hooks/use-queue";
-import { Loader2, CheckCircle2, XCircle, Clock, Play, Pause, Trash2, RotateCcw, Layers, CornerUpLeft, RefreshCw } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Clock, Play, Pause, Trash2, RotateCcw, Layers, CornerUpLeft, RefreshCw, Rewind, FastForward, Download } from "lucide-react";
 import { TTSJob } from "@/types/tts-job";
 import { apiFetchBlob } from "@/lib/api-client";
 import { useEffect, useState, useRef } from "react";
@@ -78,6 +78,65 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [downloadFormat, setDownloadFormat] = useState<"mp3" | "m4a" | null>(null);
   const [downloadingFormat, setDownloadingFormat] = useState<"mp3" | "m4a" | null>(null);
+  
+  const seekIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const seekTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopSeeking = () => {
+    if (seekTimeoutRef.current) clearTimeout(seekTimeoutRef.current);
+    if (seekIntervalRef.current) clearInterval(seekIntervalRef.current);
+  };
+
+  const startSeeking = (direction: "forward" | "rewind") => {
+    if (!audioRef.current || !duration) return;
+    
+    // Immediate jump (10s)
+    const jump = direction === "forward" ? 10 : -10;
+    let newTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + jump));
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+
+    // Wait 400ms before continuous seeking
+    seekTimeoutRef.current = setTimeout(() => {
+      seekIntervalRef.current = setInterval(() => {
+        if (!audioRef.current || !duration) return;
+        const step = direction === "forward" ? 2 : -2;
+        let t = Math.max(0, Math.min(duration, audioRef.current.currentTime + step));
+        audioRef.current.currentTime = t;
+        setCurrentTime(t);
+      }, 100);
+    }, 400);
+  };
+
+  const sliderRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const slider = sliderRef.current;
+    if (!slider) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault(); // Prevent page scrolling
+      if (!audioRef.current || !duration) return;
+
+      let delta = 0;
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        delta = e.deltaX; // scroll right -> forward
+      } else {
+        delta = -e.deltaY; // scroll up (negative deltaY) -> forward
+      }
+      
+      // Map 50 pixels of scroll to roughly 2 seconds of seeking
+      const skipSeconds = (delta / 50) * 2; 
+      let newTime = audioRef.current.currentTime + skipSeconds;
+      newTime = Math.max(0, Math.min(newTime, duration));
+      
+      audioRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
+    };
+
+    slider.addEventListener("wheel", handleWheel, { passive: false });
+    return () => slider.removeEventListener("wheel", handleWheel);
+  }, [duration]);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioBlobUrlRef = useRef<string | null>(null);
@@ -228,6 +287,32 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
             </div>
           )}
 
+          {job.status === "completed" && job.audioUrl && (
+            <div className="relative group flex items-center justify-center">
+              <button className="flex items-center justify-center h-6 w-6 rounded-md hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-500 transition-colors">
+                {downloadingFormat ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              </button>
+              <div className="absolute top-full right-0 pt-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto z-50">
+                <div className="bg-background border border-border shadow-md rounded-md flex flex-col min-w-[70px] overflow-hidden">
+                  <button
+                    onClick={() => handleDownloadClick("mp3")}
+                    disabled={downloadingFormat !== null}
+                    className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-left hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                  >
+                    MP3
+                  </button>
+                  <button
+                    onClick={() => handleDownloadClick("m4a")}
+                    disabled={downloadingFormat !== null}
+                    className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-left hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border-t border-border/50 disabled:opacity-50"
+                  >
+                    M4A
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="relative group flex items-center justify-center">
             <button 
               onClick={() => setPreviewOpen(true)}
@@ -277,32 +362,77 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
       {/* FOOTER: Audio Player & Formats */}
       {job.status === "completed" && job.audioUrl && (
         <div className="flex items-center gap-2 pt-0.5 relative z-20">
-          <div className="flex-1 flex items-center gap-2 rounded-lg bg-muted/40 border border-border/50 p-1 pl-1.5 pr-2.5 h-8 shadow-sm">
-            <button
-              onClick={togglePlay}
-              className={`flex-none flex items-center justify-center h-6 w-6 rounded-md transition-all ${
-                playing 
-                  ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20" 
-                  : "bg-background shadow-sm hover:bg-primary/10 hover:text-primary text-muted-foreground"
-              }`}
-            >
-              {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 ml-0.5" />}
-            </button>
+          <div className="flex-1 flex items-center gap-1.5 rounded-lg bg-muted/40 border border-border/50 p-1 pl-1.5 pr-2.5 h-8 shadow-sm">
+            <div className="flex items-center gap-0.5 flex-none">
+              <button
+                onPointerDown={() => startSeeking("rewind")}
+                onPointerUp={stopSeeking}
+                onPointerLeave={stopSeeking}
+                onContextMenu={(e) => e.preventDefault()}
+                className="flex items-center justify-center h-6 w-6 rounded-md bg-background shadow-sm hover:bg-muted text-muted-foreground transition-all select-none"
+                title="Rewind 10s (Hold to seek continuously)"
+              >
+                <Rewind className="h-3 w-3" />
+              </button>
+              <button
+                onClick={togglePlay}
+                className={`flex items-center justify-center h-6 w-6 rounded-md transition-all ${
+                  playing 
+                    ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20" 
+                    : "bg-background shadow-sm hover:bg-primary/10 hover:text-primary text-muted-foreground"
+                }`}
+              >
+                {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 ml-0.5" />}
+              </button>
+              <button
+                onPointerDown={() => startSeeking("forward")}
+                onPointerUp={stopSeeking}
+                onPointerLeave={stopSeeking}
+                onContextMenu={(e) => e.preventDefault()}
+                className="flex items-center justify-center h-6 w-6 rounded-md bg-background shadow-sm hover:bg-muted text-muted-foreground transition-all select-none"
+                title="Forward 10s (Hold to seek continuously)"
+              >
+                <FastForward className="h-3 w-3" />
+              </button>
+            </div>
             
             <div 
-              className="flex-1 h-1.5 bg-border/50 rounded-full overflow-hidden cursor-pointer relative"
-              onClick={(e) => {
+              ref={sliderRef}
+              className="flex-1 h-2 bg-border/50 rounded-full overflow-hidden cursor-pointer relative group"
+              onPointerDown={(e) => {
                 if (!audioRef.current || !duration) return;
                 const rect = e.currentTarget.getBoundingClientRect();
-                const percent = (e.clientX - rect.left) / rect.width;
-                audioRef.current.currentTime = percent * duration;
-                setCurrentTime(percent * duration);
+                
+                const updatePosition = (clientX: number) => {
+                  let percent = (clientX - rect.left) / rect.width;
+                  percent = Math.max(0, Math.min(1, percent));
+                  const newTime = percent * duration;
+                  if (audioRef.current) audioRef.current.currentTime = newTime;
+                  setCurrentTime(newTime);
+                };
+                
+                updatePosition(e.clientX);
+                
+                const handlePointerMove = (moveEvent: PointerEvent) => {
+                  updatePosition(moveEvent.clientX);
+                };
+                
+                const handlePointerUp = () => {
+                  window.removeEventListener("pointermove", handlePointerMove);
+                  window.removeEventListener("pointerup", handlePointerUp);
+                };
+                
+                window.addEventListener("pointermove", handlePointerMove);
+                window.addEventListener("pointerup", handlePointerUp);
               }}
+              title="Drag or scroll to seek"
             >
               <div 
                 className="absolute top-0 left-0 h-full bg-primary transition-all duration-100 ease-linear"
                 style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
               />
+              {/* Hover indicator for easier dragging */}
+              <div className="absolute top-0 left-0 w-full h-full opacity-0 group-hover:opacity-10 transition-opacity bg-primary" />
             </div>
             
             <div className="flex items-center gap-1 flex-none text-[9px] font-medium text-muted-foreground/80 tabular-nums">
@@ -310,23 +440,6 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
               <span>/</span>
               <span className="text-primary/70">{formatTime(duration || job.audioDuration || 0)}</span>
             </div>
-          </div>
-          
-          <div className="flex-none flex items-center gap-1.5">
-            <button
-              onClick={() => handleDownloadClick("mp3")}
-              disabled={downloadingFormat !== null}
-              className="flex items-center justify-center px-2 py-1.5 h-8 rounded-lg border border-border bg-background hover:bg-muted text-[9px] font-extrabold tracking-wider text-muted-foreground hover:text-foreground transition-colors shadow-sm disabled:opacity-50"
-            >
-              {downloadingFormat === "mp3" ? <Loader2 className="h-3 w-3 animate-spin" /> : "MP3"}
-            </button>
-            <button
-              onClick={() => handleDownloadClick("m4a")}
-              disabled={downloadingFormat !== null}
-              className="flex items-center justify-center px-2 py-1.5 h-8 rounded-lg border border-border bg-background hover:bg-muted text-[9px] font-extrabold tracking-wider text-muted-foreground hover:text-foreground transition-colors shadow-sm disabled:opacity-50"
-            >
-              {downloadingFormat === "m4a" ? <Loader2 className="h-3 w-3 animate-spin" /> : "M4A"}
-            </button>
           </div>
         </div>
       )}

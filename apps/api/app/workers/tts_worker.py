@@ -106,7 +106,7 @@ async def combine_audio_parts(
         for part in parts:
             output.write(f"file '{part.absolute()}'\n")
 
-    ffmpeg_binary = os.environ.get("FFMPEG_BINARY_PATH", "ffmpeg")
+    ffmpeg_binary = settings.ffmpeg_binary_path
     command = [
         ffmpeg_binary,
         "-y",

@@ -1,6 +1,7 @@
 [project]
-name = "capvoice-api"
-version = "0.1.0"
+name = "melody-api"
+version = "0.2.5"
+description = "Melody API"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.110.0",
