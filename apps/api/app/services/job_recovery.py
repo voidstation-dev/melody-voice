@@ -10,7 +10,7 @@ async def recover_jobs(
     *,
     session_factory: async_sessionmaker[AsyncSession] = AsyncSessionLocal,
     max_total_attempts: int | None = None,
-) -> list[str]:
+) -> list[tuple[str, int]]:
     attempt_limit = (
         settings.tts_max_auto_retries + 1
         if max_total_attempts is None
@@ -21,7 +21,7 @@ async def recover_jobs(
             select(TTSJobModel).where(TTSJobModel.status.in_(["queued", "processing"]))
         )
         jobs = result.scalars().all()
-        recovered_ids: list[str] = []
+        recovered_ids: list[tuple[str, int]] = []
 
         for job in jobs:
             if job.attempt_count >= attempt_limit:
@@ -35,7 +35,7 @@ async def recover_jobs(
             job.started_at = None
             job.error_code = None
             job.error_message = None
-            recovered_ids.append(job.id)
+            recovered_ids.append((job.id, job.batch_position or 0))
 
         await session.commit()
         return recovered_ids

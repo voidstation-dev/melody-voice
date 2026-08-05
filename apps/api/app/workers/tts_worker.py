@@ -320,6 +320,7 @@ async def execute_tts_job_step(
                 await queue_manager.enqueue_after(
                     job.id,
                     delay_seconds=delay,
+                    batch_position=job.batch_position or 0,
                 )
                 logger.warning(
                     "TTS job scheduled for retry",

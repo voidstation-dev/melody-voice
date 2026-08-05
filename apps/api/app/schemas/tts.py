@@ -59,3 +59,13 @@ class TTSJobListResponse(BaseModel):
     page: int
     pageSize: int
     total: int
+
+
+class BatchStatusResponse(BaseModel):
+    batchId: str
+    totalJobs: int
+    completedJobs: int
+    failedJobs: int
+    pendingJobs: int
+    progress: float
+    jobs: list[TTSJobResponse]

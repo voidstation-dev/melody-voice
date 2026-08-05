@@ -114,7 +114,7 @@ async def create_job_endpoint(
         )
     job = await create_job(session, **create_kwargs)
 
-    await queue_manager.enqueue(job.id)
+    await queue_manager.enqueue(job.id, batch_position=job.batch_position or 0)
 
     return BatchJobCreateResponse(batchId=batch_id, jobs=[serialize_job(job)])
 
@@ -285,7 +285,7 @@ async def retry_job_endpoint(
         )
     else:
         retried_job = await create_tts_job(session, **retry_kwargs)
-    await queue_manager.enqueue(retried_job.id)
+    await queue_manager.enqueue(retried_job.id, batch_position=retried_job.batch_position or 0)
 
     return serialize_job(retried_job)
 

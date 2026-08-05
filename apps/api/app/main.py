@@ -32,10 +32,10 @@ async def lifespan(app: FastAPI):
         settings.raw_response_dir,
         older_than_seconds=settings.raw_provider_response_retention_seconds,
     )
-    recovered_ids = await recover_jobs()
+    recovered_jobs = await recover_jobs()
     await queue_manager.start()
-    for job_id in recovered_ids:
-        await queue_manager.enqueue(job_id)
+    for job_id, batch_pos in recovered_jobs:
+        await queue_manager.enqueue(job_id, batch_position=batch_pos)
     try:
         yield
     finally:

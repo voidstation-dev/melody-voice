@@ -21,7 +21,7 @@ class TTSQueueManager:
         circuit_breaker: ProviderCircuitBreaker | None = None,
         shutdown_grace_seconds: float | None = None,
     ):
-        self.queue: asyncio.Queue[str] = asyncio.Queue()
+        self.queue: asyncio.PriorityQueue[tuple[int, float, str]] = asyncio.PriorityQueue()
         self.concurrency = concurrency
         self.circuit_breaker = circuit_breaker or ProviderCircuitBreaker(
             failure_threshold=(settings.tts_circuit_breaker_failure_threshold),
@@ -84,14 +84,14 @@ class TTSQueueManager:
 
         while not self.queue.empty():
             try:
-                job_id = self.queue.get_nowait()
+                _, _, job_id = self.queue.get_nowait()
             except asyncio.QueueEmpty:
                 break
             async with self._enqueue_lock:
                 self.enqueued_ids.discard(job_id)
             self.queue.task_done()
 
-    async def enqueue(self, job_id: str) -> bool:
+    async def enqueue(self, job_id: str, batch_position: int = 0) -> bool:
         async with self._enqueue_lock:
             if not self.accepting_jobs:
                 raise RuntimeError("Queue manager is not accepting jobs")
@@ -100,7 +100,8 @@ class TTSQueueManager:
             self.enqueued_ids.add(job_id)
 
         try:
-            await self.queue.put(job_id)
+            import time
+            await self.queue.put((batch_position, time.time(), job_id))
         except BaseException:
             async with self._enqueue_lock:
                 self.enqueued_ids.discard(job_id)
@@ -113,10 +114,11 @@ class TTSQueueManager:
         job_id: str,
         *,
         delay_seconds: float,
+        batch_position: int = 0,
     ) -> None:
         async def delayed_enqueue() -> None:
             await asyncio.sleep(delay_seconds)
-            await self.enqueue(job_id)
+            await self.enqueue(job_id, batch_position)
 
         task = asyncio.create_task(
             delayed_enqueue(),
@@ -138,7 +140,7 @@ class TTSQueueManager:
         logger.info("TTS queue worker %s started", worker_id)
         while True:
             try:
-                job_id = await self.queue.get()
+                _, _, job_id = await self.queue.get()
             except asyncio.CancelledError:
                 return
 

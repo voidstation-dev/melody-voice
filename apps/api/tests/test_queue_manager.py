@@ -29,7 +29,8 @@ async def test_delayed_enqueue_does_not_block_caller():
     assert asyncio.get_running_loop().time() - started_at < 0.02
     assert manager.queue.empty()
     await asyncio.sleep(0.06)
-    assert await manager.queue.get() == "job-1"
+    _, _, job_id = await manager.queue.get()
+    assert job_id == "job-1"
     manager.queue.task_done()
 
 
