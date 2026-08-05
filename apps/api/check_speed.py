@@ -3,7 +3,7 @@ import sys
 
 from capcut_tts_api import CapCutClient
 
-sys.path.append('.')
+sys.path.append(".")
 import os
 
 from app.services.provider_response_parser import extract_audio_urls
@@ -11,12 +11,22 @@ from app.services.provider_response_parser import extract_audio_urls
 
 def get_duration(url):
     ffmpeg_cmd = os.environ.get("FFMPEG_BINARY_PATH", "ffprobe")
-    cmd = [ffmpeg_cmd, "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", url]
+    cmd = [
+        ffmpeg_cmd,
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        url,
+    ]
     try:
         out = subprocess.check_output(cmd).decode().strip()
         return float(out)
-    except:
+    except Exception:  # noqa: BLE001
         return 0.0
+
 
 client = CapCutClient()
 text = "Xin chào các bạn, đây là một đoạn text dài để kiểm tra tốc độ đọc của hệ thống."

@@ -12,7 +12,7 @@ from app.services.database_migrations import (
 )
 
 ALEMBIC_INI = Path(__file__).parents[1] / "alembic.ini"
-HEAD_REVISION = "a3f1c9d2e7b4"
+HEAD_REVISION = "62f59f77359a"
 
 
 def sqlite_url(path: Path) -> str:
@@ -134,9 +134,7 @@ async def test_migrations_adopt_pre_batch_database_and_create_backup(tmp_path):
     )
 
     with sqlite3.connect(database_path) as connection:
-        columns = {
-            row[1] for row in connection.execute("PRAGMA table_info(tts_jobs)")
-        }
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(tts_jobs)")}
         revision = connection.execute(
             "SELECT version_num FROM alembic_version"
         ).fetchone()[0]
@@ -202,7 +200,13 @@ async def test_migrations_reject_legacy_schema_with_wrong_core_type(tmp_path):
     assert not list(tmp_path.glob("wrong-type.db.pre-migration-*.bak"))
 
 
-PROVIDER_FIELDS = {"provider_id", "backbone_id", "style", "voice_profile_id", "request_metadata"}
+PROVIDER_FIELDS = {
+    "provider_id",
+    "backbone_id",
+    "style",
+    "voice_profile_id",
+    "request_metadata",
+}
 
 
 @pytest.mark.asyncio
@@ -215,9 +219,7 @@ async def test_migrations_add_provider_fields_to_fresh_database(tmp_path):
     )
 
     with sqlite3.connect(database_path) as connection:
-        columns = {
-            row[1] for row in connection.execute("PRAGMA table_info(tts_jobs)")
-        }
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(tts_jobs)")}
         revision = connection.execute(
             "SELECT version_num FROM alembic_version"
         ).fetchone()[0]
@@ -270,7 +272,9 @@ async def test_migrations_backfill_existing_rows_with_capcut_provider_id(tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_migrations_adopt_current_unversioned_schema_with_provider_fields(tmp_path):
+async def test_migrations_adopt_current_unversioned_schema_with_provider_fields(
+    tmp_path,
+):
     """An unversioned schema created by Base.metadata.create_all (which now
     includes the provider fields) must be stamped at head, not adopted as
     legacy (which would try to re-add columns and fail)."""
@@ -309,7 +313,9 @@ async def test_migrations_downgrade_drops_provider_fields(tmp_path):
     from app.services.database_migrations import _sync_database_url
 
     config = Config(str(ALEMBIC_INI))
-    config.set_main_option("sqlalchemy.url", _sync_database_url(sqlite_url(database_path)))
+    config.set_main_option(
+        "sqlalchemy.url", _sync_database_url(sqlite_url(database_path))
+    )
     config.attributes["database_url"] = _sync_database_url(sqlite_url(database_path))
     config.attributes["configure_logger"] = False
     # Downgrade to the previous revision (1ccaccfcb3f0) should drop provider fields.

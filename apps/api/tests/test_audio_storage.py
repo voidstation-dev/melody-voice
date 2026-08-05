@@ -18,7 +18,11 @@ from app.services.audio_storage import (
 @respx.mock
 async def test_download_audio_success(tmp_path: Path):
     target_url = "https://cdn.example.com/audio.mp3"
-    respx.get(target_url).mock(return_value=Response(200, content=b"ID3mockaudiodata", headers={"Content-Type": "audio/mpeg"}))
+    respx.get(target_url).mock(
+        return_value=Response(
+            200, content=b"ID3mockaudiodata", headers={"Content-Type": "audio/mpeg"}
+        )
+    )
 
     dest = tmp_path / "test.mp3"
     mime, size = await download_audio(url=target_url, destination=dest)
@@ -49,7 +53,9 @@ async def test_download_rejects_disallowed_content_type(tmp_path: Path):
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_download_accepts_octet_stream_payload_rejected_by_validation(tmp_path: Path):
+async def test_download_accepts_octet_stream_payload_rejected_by_validation(
+    tmp_path: Path,
+):
     # Providers sometimes return application/octet-stream for audio. download_audio
     # streams it through (it does not inspect magic bytes); the audio-signature
     # rejection is the responsibility of validate_audio_file, invoked afterwards.
@@ -73,9 +79,6 @@ async def test_download_accepts_octet_stream_payload_rejected_by_validation(tmp_
 
 
 @pytest.mark.asyncio
-
-
-
 class BrokenAudioStream(httpx.AsyncByteStream):
     async def __aiter__(self):
         yield b"ID3partial"

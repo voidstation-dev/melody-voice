@@ -33,10 +33,7 @@ async def test_concurrent_m4a_requests_run_one_atomic_conversion(
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_subprocess)
 
     await asyncio.gather(
-        *(
-            convert_mp3_to_m4a(str(input_path), str(output_path))
-            for _ in range(5)
-        )
+        *(convert_mp3_to_m4a(str(input_path), str(output_path)) for _ in range(5))
     )
 
     assert process_count == 1

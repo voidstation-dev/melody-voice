@@ -14,9 +14,7 @@ PUBLIC_PATHS = {
 
 def validate_runtime_security() -> None:
     if settings.app_env.lower() == "production" and not settings.melody_api_token:
-        raise RuntimeError(
-            "MELODY_API_TOKEN is required when APP_ENV=production"
-        )
+        raise RuntimeError("MELODY_API_TOKEN is required when APP_ENV=production")
 
 
 class LocalAuthMiddleware(BaseHTTPMiddleware):

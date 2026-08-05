@@ -10,9 +10,8 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-if (
-    config.config_file_name is not None
-    and config.attributes.get("configure_logger", True)
+if config.config_file_name is not None and config.attributes.get(
+    "configure_logger", True
 ):
     fileConfig(config.config_file_name)
 
@@ -24,6 +23,8 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from app.config import settings
 from app.database import Base
+from app.models.custom_voice import CustomVoiceModel  # noqa: F401
+from app.models.tts_job import TTSJobModel  # noqa: F401
 
 runtime_database_url = config.attributes.get(
     "database_url",
@@ -81,9 +82,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

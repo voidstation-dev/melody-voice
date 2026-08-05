@@ -24,19 +24,31 @@ def get_target_triple():
 def get_pyinstaller_command() -> list[str]:
     return [
         "pyinstaller",
-        "--name", "melody-api",
-        "--paths", ".",
+        "--name",
+        "melody-api",
+        "--paths",
+        ".",
         "--hidden-import=aiosqlite",
         "--hidden-import=app.utils.audio_utils",
         "--hidden-import=vieneu_core",
-        "--add-data", "alembic.ini:.",
-        "--add-data", "alembic:alembic",
+        "--hidden-import=vieneu",
+        "--hidden-import=librosa",
+        "--hidden-import=soundfile",
+        "--hidden-import=onnxruntime",
+        "--collect-data=vieneu",
+        "--collect-all=onnxruntime",
+        "--add-data",
+        "alembic.ini:.",
+        "--add-data",
+        "alembic:alembic",
         "--onefile",
         "--clean",
         "--noconfirm",
-        "--distpath", "./dist",
+        "--distpath",
+        "./dist",
         "app/main.py",
     ]
+
 
 def main():
     target_triple = get_target_triple()
@@ -59,7 +71,24 @@ def main():
 
     print(f"Copying {src_bin} to {dest_bin}")
     shutil.copy2(src_bin, dest_bin)
+    
+    # Also copy Voice.json if present
+    voice_json_src = "../../vendor/capcut-tts-api/Voice.json"
+    if os.path.exists(voice_json_src):
+        print(f"Copying {voice_json_src} to {dest_dir}/Voice.json")
+        shutil.copy2(voice_json_src, f"{dest_dir}/Voice.json")
+
+    # Also copy ffmpeg if present in path
+    ffmpeg_src = shutil.which("ffmpeg")
+    if ffmpeg_src:
+        ffmpeg_dest = f"{dest_dir}/ffmpeg"
+        if platform.system().lower() == "windows":
+            ffmpeg_dest += ".exe"
+        print(f"Copying {ffmpeg_src} to {ffmpeg_dest}")
+        shutil.copy2(ffmpeg_src, ffmpeg_dest)
+
     print("Done!")
+
 
 if __name__ == "__main__":
     main()

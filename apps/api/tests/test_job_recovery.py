@@ -89,7 +89,7 @@ async def test_recovery_requeues_recoverable_jobs_and_fails_exhausted_jobs(
     async with async_session_factory() as session:
         session.add_all(jobs)
         await session.commit()
-        recoverable_ids = {jobs[0].id, jobs[1].id}
+        recoverable_ids = {(jobs[0].id, 0), (jobs[1].id, 0)}
         exhausted_id = jobs[2].id
 
     recovered = await recover_jobs(
@@ -99,7 +99,9 @@ async def test_recovery_requeues_recoverable_jobs_and_fails_exhausted_jobs(
 
     assert set(recovered) == recoverable_ids
     async with async_session_factory() as session:
-        recovered_jobs = [await session.get(TTSJobModel, job_id) for job_id in recovered]
+        recovered_jobs = [
+            await session.get(TTSJobModel, job_id) for job_id, _ in recovered
+        ]
         assert all(job is not None and job.status == "queued" for job in recovered_jobs)
         assert all(job is not None and job.progress == 0 for job in recovered_jobs)
         exhausted = await session.get(TTSJobModel, exhausted_id)

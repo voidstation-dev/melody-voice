@@ -57,9 +57,7 @@ def _has_mp3_signature(path: Path) -> bool:
         header = source.read(12)
     if header.startswith(b"ID3"):
         return True
-    if len(header) >= 2 and header[0] == 0xFF and header[1] & 0xE0 == 0xE0:
-        return True
-    return False
+    return len(header) >= 2 and header[0] == 0xFF and header[1] & 0xE0 == 0xE0
 
 
 def _has_mp4_signature(path: Path) -> bool:
@@ -111,9 +109,7 @@ async def download_audio(
         async with client.stream("GET", url) as response:
             response.raise_for_status()
             content_type = (
-                response.headers.get("content-type", "")
-                .split(";")[0]
-                .lower()
+                response.headers.get("content-type", "").split(";")[0].lower()
             )
             if content_type and content_type not in ALLOWED_CONTENT_TYPES:
                 raise ValueError(f"Unexpected content type: {content_type}")

@@ -23,13 +23,16 @@ async def async_session_factory(tmp_path):
     finally:
         await engine.dispose()
 
+
 @pytest_asyncio.fixture
 async def async_session() -> AsyncSession:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
-    SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    SessionLocal = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
     async with SessionLocal() as session:
         yield session
     await engine.dispose()

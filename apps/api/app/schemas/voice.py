@@ -7,8 +7,10 @@ class VoiceResponse(BaseModel):
     languageShort: str
     voiceType: str
     displayName: str
-    resourceId: str
+    resourceId: str | None = None
     capturedAt: str | None = None
+    providerId: str | None = None
+
 
 class VoiceListResponse(BaseModel):
     items: list[VoiceResponse]

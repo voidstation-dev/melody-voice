@@ -10,6 +10,7 @@ src/vieneu_core/fixtures.py
 tests/test_contracts.py
 tests/test_downloader.py
 tests/test_engine.py
+tests/test_isolation.py
 vieneu_core.egg-info/PKG-INFO
 vieneu_core.egg-info/SOURCES.txt
 vieneu_core.egg-info/dependency_links.txt

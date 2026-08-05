@@ -32,15 +32,16 @@ async def lifespan(app: FastAPI):
         settings.raw_response_dir,
         older_than_seconds=settings.raw_provider_response_retention_seconds,
     )
-    recovered_ids = await recover_jobs()
+    recovered_jobs = await recover_jobs()
     await queue_manager.start()
-    for job_id in recovered_ids:
-        await queue_manager.enqueue(job_id)
+    for job_id, batch_pos in recovered_jobs:
+        await queue_manager.enqueue(job_id, batch_position=batch_pos)
     try:
         yield
     finally:
         await queue_manager.stop()
         await close_http_client()
+
 
 app = FastAPI(title="CapVoice Studio API", version="0.1.0", lifespan=lifespan)
 
@@ -61,7 +62,7 @@ if __name__ == "__main__":
     import sys
 
     import uvicorn
-    
+
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(line_buffering=True)
     if hasattr(sys.stderr, "reconfigure"):
@@ -74,4 +75,10 @@ if __name__ == "__main__":
         settings.api_host,
         settings.api_port,
     )
-    uvicorn.run(app, host=settings.api_host, port=settings.api_port, reload=False, log_level="info")
+    uvicorn.run(
+        app,
+        host=settings.api_host,
+        port=settings.api_port,
+        reload=False,
+        log_level="info",
+    )

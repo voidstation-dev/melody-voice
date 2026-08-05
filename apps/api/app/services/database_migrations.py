@@ -124,9 +124,7 @@ def _current_revision(connection: sqlite3.Connection) -> str | None:
 def _has_post_baseline_columns(connection: sqlite3.Connection) -> bool:
     if not _table_exists(connection, "tts_jobs"):
         return False
-    columns = {
-        row[1] for row in connection.execute("PRAGMA table_info(tts_jobs)")
-    }
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(tts_jobs)")}
     return POST_BASELINE_COLUMNS.issubset(columns)
 
 
@@ -142,9 +140,7 @@ def _backup_database(database_path: Path, *, retain: int = 3) -> Path:
         source.backup(destination)
 
     backups = sorted(
-        database_path.parent.glob(
-            f"{database_path.name}.pre-migration-*.bak"
-        ),
+        database_path.parent.glob(f"{database_path.name}.pre-migration-*.bak"),
         key=lambda path: path.stat().st_mtime,
         reverse=True,
     )
@@ -167,20 +163,18 @@ def _adopt_legacy_schema(
                 f"Legacy tts_jobs schema is missing required columns: {missing}"
             )
         definitions = {
-            row[1]: (row[2].upper(), bool(row[3]), row[5])
-            for row in column_rows
+            row[1]: (row[2].upper(), bool(row[3]), row[5]) for row in column_rows
         }
         incompatible = []
-        for name, (expected_type, expected_notnull, expected_pk) in (
-            LEGACY_CORE_SCHEMA.items()
-        ):
+        for name, (
+            expected_type,
+            expected_notnull,
+            expected_pk,
+        ) in LEGACY_CORE_SCHEMA.items():
             actual_type, actual_notnull, actual_pk = definitions[name]
             if (
                 actual_type != expected_type
-                or (
-                    expected_notnull is not None
-                    and actual_notnull != expected_notnull
-                )
+                or (expected_notnull is not None and actual_notnull != expected_notnull)
                 or actual_pk != expected_pk
             ):
                 incompatible.append(name)
@@ -193,18 +187,14 @@ def _adopt_legacy_schema(
 
     _backup_database(database_path)
     with sqlite3.connect(database_path) as connection:
-        columns = {
-            row[1]
-            for row in connection.execute("PRAGMA table_info(tts_jobs)")
-        }
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(tts_jobs)")}
         for name, sql_type in LEGACY_ADDITIONS.items():
             if name not in columns:
                 connection.execute(
                     f'ALTER TABLE tts_jobs ADD COLUMN "{name}" {sql_type}'
                 )
         connection.execute(
-            "CREATE INDEX IF NOT EXISTS ix_tts_jobs_batch_id "
-            "ON tts_jobs (batch_id)"
+            "CREATE INDEX IF NOT EXISTS ix_tts_jobs_batch_id ON tts_jobs (batch_id)"
         )
         connection.commit()
     command.stamp(config, BASELINE_REVISION)
@@ -259,9 +249,7 @@ async def run_database_migrations(
     alembic_ini_path: Path | None = None,
 ) -> None:
     runtime_url = database_url or settings.database_url
-    ini_path = alembic_ini_path or (
-        Path(__file__).resolve().parents[2] / "alembic.ini"
-    )
+    ini_path = alembic_ini_path or (Path(__file__).resolve().parents[2] / "alembic.ini")
     await asyncio.to_thread(
         _run_database_migrations,
         database_url=runtime_url,

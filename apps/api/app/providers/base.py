@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -8,14 +9,17 @@ class ProviderVoice:
     language_code: str
     voice_type: str
     display_name: str
-    resource_id: str
+    resource_id: str | None = None
     captured_at: str | None = None
+    provider_id: str = "capcut"
+
 
 @dataclass(frozen=True)
 class ProviderResult:
     raw_response: dict[str, Any]
     audio_urls: list[str]
     local_paths: list[str] | None = None
+
 
 class TTSProvider(Protocol):
     async def list_voices(self, language: str | None = None) -> list[ProviderVoice]: ...
@@ -26,4 +30,14 @@ class TTSProvider(Protocol):
         voice_type: str,
         resource_id: str | None,
         rate: float,
+        style: str | None = None,
     ) -> ProviderResult: ...
+    async def synthesize_stream(
+        self,
+        *,
+        text: str,
+        voice_type: str,
+        resource_id: str | None,
+        rate: float,
+        style: str | None = None,
+    ) -> AsyncGenerator[bytes, None]: ...

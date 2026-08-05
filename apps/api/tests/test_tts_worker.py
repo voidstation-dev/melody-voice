@@ -1,6 +1,5 @@
 import asyncio
 import threading
-import time
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -63,11 +62,11 @@ class ConcurrentFakeProvider:
         self.active = 0
         self.max_active = 0
 
-    def synthesize(self, **kwargs):
+    async def synthesize(self, **kwargs):
         with self._lock:
             self.active += 1
             self.max_active = max(self.max_active, self.active)
-        time.sleep(0.03)
+        await asyncio.sleep(0.03)
         with self._lock:
             self.active -= 1
         return ProviderResult(
@@ -127,7 +126,9 @@ async def test_worker_chunk_tasks_never_commit_shared_session(
     monkeypatch.setattr(settings, "save_raw_provider_responses", False)
 
     try:
-        await execute_tts_job_step(job_id, provider=provider, worker_id=7)
+        await execute_tts_job_step(
+            job_id, provider_registry={"capcut": provider}, worker_id=7
+        )
         async with session_factory() as session:
             reloaded = await session.get(TTSJobModel, job_id)
             assert reloaded is not None
@@ -142,7 +143,7 @@ class TimeoutProvider:
     def __init__(self):
         self.calls = 0
 
-    def synthesize(self, **kwargs):
+    async def synthesize(self, **kwargs):
         self.calls += 1
         raise requests.Timeout("provider timed out")
 
@@ -168,7 +169,9 @@ async def test_worker_retries_timeout_twice_then_fails(
     provider = TimeoutProvider()
     delayed_enqueue = AsyncMock()
     worker_sleep = AsyncMock()
-    monkeypatch.setattr("app.workers.tts_worker.AsyncSessionLocal", async_session_factory)
+    monkeypatch.setattr(
+        "app.workers.tts_worker.AsyncSessionLocal", async_session_factory
+    )
     monkeypatch.setattr(
         "app.workers.queue_manager.queue_manager.enqueue_after",
         delayed_enqueue,
@@ -178,9 +181,9 @@ async def test_worker_retries_timeout_twice_then_fails(
     monkeypatch.setattr(settings, "tts_max_auto_retries", 2, raising=False)
     monkeypatch.setattr(settings, "tts_retry_base_delay_seconds", 2, raising=False)
 
-    await execute_tts_job_step(job_id, provider=provider)
-    await execute_tts_job_step(job_id, provider=provider)
-    await execute_tts_job_step(job_id, provider=provider)
+    await execute_tts_job_step(job_id, provider_registry={"capcut": provider})
+    await execute_tts_job_step(job_id, provider_registry={"capcut": provider})
+    await execute_tts_job_step(job_id, provider_registry={"capcut": provider})
 
     async with async_session_factory() as session:
         reloaded = await session.get(TTSJobModel, job_id)
@@ -197,7 +200,7 @@ class SuccessfulProvider:
     def __init__(self):
         self.rates: list[float] = []
 
-    def synthesize(self, **kwargs):
+    async def synthesize(self, **kwargs):
         self.rates.append(kwargs["rate"])
         return ProviderResult(
             raw_response={"audio_url": "https://cdn.example/audio.mp3"},
@@ -243,7 +246,9 @@ async def test_worker_applies_rate_in_exactly_one_stage(
         destination.write_bytes(b"ID3combined")
 
     provider = SuccessfulProvider()
-    monkeypatch.setattr("app.workers.tts_worker.AsyncSessionLocal", async_session_factory)
+    monkeypatch.setattr(
+        "app.workers.tts_worker.AsyncSessionLocal", async_session_factory
+    )
     monkeypatch.setattr("app.workers.tts_worker.download_audio", fake_download)
     monkeypatch.setattr("app.workers.tts_worker.combine_audio_parts", fake_combine)
     monkeypatch.setattr(settings, "audio_storage_dir", tmp_path)
@@ -254,7 +259,7 @@ async def test_worker_applies_rate_in_exactly_one_stage(
         raising=False,
     )
 
-    await execute_tts_job_step(job_id, provider=provider)
+    await execute_tts_job_step(job_id, provider_registry={"capcut": provider})
 
     assert provider.rates == [expected_provider_rate]
     assert ffmpeg_rates == [expected_ffmpeg_rate]
@@ -292,13 +297,19 @@ async def test_ffmpeg_failure_does_not_retry_provider(
 
     provider = SuccessfulProvider()
     delayed_enqueue = AsyncMock()
-    monkeypatch.setattr("app.workers.tts_worker.AsyncSessionLocal", async_session_factory)
+    monkeypatch.setattr(
+        "app.workers.tts_worker.AsyncSessionLocal", async_session_factory
+    )
     monkeypatch.setattr("app.workers.tts_worker.download_audio", fake_download)
     monkeypatch.setattr("app.workers.tts_worker.combine_audio_parts", fail_combine)
-    monkeypatch.setattr("app.workers.queue_manager.queue_manager.enqueue_after", delayed_enqueue, raising=False)
+    monkeypatch.setattr(
+        "app.workers.queue_manager.queue_manager.enqueue_after",
+        delayed_enqueue,
+        raising=False,
+    )
     monkeypatch.setattr(settings, "audio_storage_dir", tmp_path)
 
-    await execute_tts_job_step(job_id, provider=provider)
+    await execute_tts_job_step(job_id, provider_registry={"capcut": provider})
 
     async with async_session_factory() as session:
         reloaded = await session.get(TTSJobModel, job_id)
@@ -335,12 +346,16 @@ async def test_invalid_final_output_is_failed_and_removed(
     async def invalid_combine(*, parts, destination, rate):
         destination.write_bytes(b"not audio")
 
-    monkeypatch.setattr("app.workers.tts_worker.AsyncSessionLocal", async_session_factory)
+    monkeypatch.setattr(
+        "app.workers.tts_worker.AsyncSessionLocal", async_session_factory
+    )
     monkeypatch.setattr("app.workers.tts_worker.download_audio", fake_download)
     monkeypatch.setattr("app.workers.tts_worker.combine_audio_parts", invalid_combine)
     monkeypatch.setattr(settings, "audio_storage_dir", tmp_path)
 
-    await execute_tts_job_step(job_id, provider=SuccessfulProvider())
+    await execute_tts_job_step(
+        job_id, provider_registry={"capcut": SuccessfulProvider()}
+    )
 
     async with async_session_factory() as session:
         reloaded = await session.get(TTSJobModel, job_id)
@@ -378,13 +393,17 @@ async def test_successful_job_does_not_persist_raw_provider_response(
         destination.write_bytes(b"ID3combined")
 
     raw_directory = tmp_path / "raw"
-    monkeypatch.setattr("app.workers.tts_worker.AsyncSessionLocal", async_session_factory)
+    monkeypatch.setattr(
+        "app.workers.tts_worker.AsyncSessionLocal", async_session_factory
+    )
     monkeypatch.setattr("app.workers.tts_worker.download_audio", fake_download)
     monkeypatch.setattr("app.workers.tts_worker.combine_audio_parts", fake_combine)
     monkeypatch.setattr(settings, "audio_storage_dir", tmp_path)
     monkeypatch.setattr(settings, "raw_response_dir", raw_directory)
     monkeypatch.setattr(settings, "save_raw_provider_responses", True)
 
-    await execute_tts_job_step(job_id, provider=SuccessfulProvider())
+    await execute_tts_job_step(
+        job_id, provider_registry={"capcut": SuccessfulProvider()}
+    )
 
     assert list(raw_directory.glob("*.json")) == []

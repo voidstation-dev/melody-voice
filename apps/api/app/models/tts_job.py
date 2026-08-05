@@ -10,10 +10,13 @@ from app.database import Base
 def utc_now():
     return datetime.now(timezone.utc)
 
+
 class TTSJobModel(Base):
     __tablename__ = "tts_jobs"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
     kind: Mapped[str] = mapped_column(String(20), default="generation", index=True)
 
     # Batch & Queue fields
@@ -54,9 +57,17 @@ class TTSJobModel(Base):
     error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
-    
+
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
