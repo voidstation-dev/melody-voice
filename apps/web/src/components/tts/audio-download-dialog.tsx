@@ -23,6 +23,7 @@ export function AudioDownloadDialog({
   useEffect(() => {
     if (isOpen && job) {
       const suggestedName = slugify(getFirstLine(job.text)) || `melody-${job.id}`;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFileName(suggestedName);
     }
   }, [isOpen, job]);
