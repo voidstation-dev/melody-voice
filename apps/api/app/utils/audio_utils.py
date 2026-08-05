@@ -25,7 +25,7 @@ async def convert_mp3_to_m4a(input_path: str, output_path: str) -> None:
             validate_audio_file(output, mime_type="audio/mp4")
             return
 
-        ffmpeg_binary = os.environ.get("FFMPEG_BINARY_PATH", "ffmpeg")
+        ffmpeg_binary = settings.ffmpeg_binary_path
         command = [
             ffmpeg_binary,
             "-y",
@@ -65,7 +65,7 @@ async def convert_mp3_to_m4a(input_path: str, output_path: str) -> None:
 
 
 async def get_audio_duration(file_path: Path) -> float | None:
-    ffmpeg_binary = os.environ.get("FFMPEG_BINARY_PATH", "ffmpeg")
+    ffmpeg_binary = settings.ffmpeg_binary_path
     command = [
         ffmpeg_binary,
         "-i",

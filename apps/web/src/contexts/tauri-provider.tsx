@@ -53,15 +53,12 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
 
     const start = (async () => {
       const apiToken = crypto.randomUUID();
-      const isWindows = navigator.userAgent.toLowerCase().includes("windows");
-      const ffmpegName = isWindows ? "bin/ffmpeg.exe" : "bin/ffmpeg";
-      const [dataDir, catalogPath, ffmpegPath] = await Promise.all([
+      const [dataDir, catalogPath] = await Promise.all([
         appDataDir(),
         resolveResource("bin/Voice.json"),
-        resolveResource(ffmpegName),
       ]);
 
-      console.log("Starting sidecar with:", { dataDir, catalogPath, ffmpegPath });
+      console.log("Starting sidecar with:", { dataDir, catalogPath });
 
       const sidecar = Command.sidecar("bin/melody-api", [], {
         env: {
@@ -72,7 +69,6 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
           MELODY_API_TOKEN: apiToken,
           MELODY_DATA_DIR: dataDir,
           MELODY_CATALOG_PATH: catalogPath,
-          FFMPEG_BINARY_PATH: ffmpegPath,
         },
       });
 

@@ -69,7 +69,7 @@ class VieneuProvider:
             await asyncio.to_thread(engine.save, wav, wav_path)
 
             mp3_path = wav_path.with_suffix(".mp3")
-            ffmpeg_binary = os.environ.get("FFMPEG_BINARY_PATH", "ffmpeg")
+            ffmpeg_binary = settings.ffmpeg_binary_path
 
             command = [
                 ffmpeg_binary,
@@ -110,7 +110,7 @@ class VieneuProvider:
         style: str | None = None,
     ) -> AsyncGenerator[bytes, None]:
         engine = await self.manager.get_engine()
-        ffmpeg_binary = os.environ.get("FFMPEG_BINARY_PATH", "ffmpeg")
+        ffmpeg_binary = settings.ffmpeg_binary_path
 
         command = [
             ffmpeg_binary,

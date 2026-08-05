@@ -66,6 +66,17 @@ async function main() {
   await download(url, targetPath);
   fs.chmodSync(targetPath, 0o755);
   console.log(`Successfully wrote static FFmpeg to ${targetPath}`);
+
+  // Create target-specific copies for Tauri externalBin
+  if (process.platform === 'darwin') {
+    fs.copyFileSync(targetPath, path.join(targetDir, 'ffmpeg-aarch64-apple-darwin'));
+    fs.copyFileSync(targetPath, path.join(targetDir, 'ffmpeg-x86_64-apple-darwin'));
+  } else if (process.platform === 'win32') {
+    fs.copyFileSync(targetPath, path.join(targetDir, 'ffmpeg-x86_64-pc-windows-msvc.exe'));
+    fs.copyFileSync(targetPath, path.join(targetDir, 'ffmpeg-aarch64-pc-windows-msvc.exe'));
+  } else if (process.platform === 'linux') {
+    fs.copyFileSync(targetPath, path.join(targetDir, 'ffmpeg-x86_64-unknown-linux-gnu'));
+  }
 }
 
 main().catch((err) => {

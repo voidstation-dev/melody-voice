@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "VoidMelody",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "identifier": "com.voidstation.voidmelody",
   "build": {
     "frontendDist": "../out",
@@ -30,11 +30,10 @@
     "targets": "all",
     "createUpdaterArtifacts": true,
     "externalBin": [
-      "bin/melody-api"
+      "bin/melody-api",
+      "bin/ffmpeg"
     ],
     "resources": [
-      "bin/ffmpeg",
-      "bin/ffmpeg.exe",
       "bin/Voice.json"
     ],
     "icon": [

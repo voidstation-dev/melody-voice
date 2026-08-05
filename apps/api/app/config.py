@@ -46,6 +46,17 @@ class Settings(BaseSettings):
     raw_provider_response_retention_seconds: float = 604800.0
     log_level: str = "INFO"
 
+    @property
+    def ffmpeg_binary_path(self) -> str:
+        """Finds ffmpeg sidecar or fallback to PATH"""
+        import sys
+        if getattr(sys, 'frozen', False):
+            ext = ".exe" if os.name == "nt" else ""
+            bundled = os.path.join(os.path.dirname(sys.executable), f"ffmpeg{ext}")
+            if os.path.exists(bundled):
+                return bundled
+        return os.environ.get("FFMPEG_BINARY_PATH", "ffmpeg")
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

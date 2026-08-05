@@ -53,7 +53,7 @@ def _audio_directory_ready() -> bool:
 
 
 def _ffmpeg_ready() -> bool:
-    configured = os.environ.get("FFMPEG_BINARY_PATH", "ffmpeg")
+    configured = settings.ffmpeg_binary_path
     configured_path = Path(configured)
     if configured_path.is_absolute():
         return configured_path.is_file() and os.access(configured_path, os.X_OK)
