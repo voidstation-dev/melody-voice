@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "VoidMelody",
-  "version": "0.2.5",
-  "identifier": "com.voidstation.voidmelody",
+  "version": "0.2.6",
+  "identifier": "com.voidstation.melody",
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
