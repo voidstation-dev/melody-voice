@@ -13,7 +13,7 @@ from app.services.database_migrations import (
 
 
 ALEMBIC_INI = Path(__file__).parents[1] / "alembic.ini"
-HEAD_REVISION = "1ccaccfcb3f0"
+HEAD_REVISION = "a3f1c9d2e7b4"
 
 
 def sqlite_url(path: Path) -> str:
@@ -201,3 +201,121 @@ async def test_migrations_reject_legacy_schema_with_wrong_core_type(tmp_path):
         )
 
     assert not list(tmp_path.glob("wrong-type.db.pre-migration-*.bak"))
+
+
+PROVIDER_FIELDS = {"provider_id", "backbone_id", "style", "voice_profile_id", "request_metadata"}
+
+
+@pytest.mark.asyncio
+async def test_migrations_add_provider_fields_to_fresh_database(tmp_path):
+    database_path = tmp_path / "fresh_provider.db"
+
+    await run_database_migrations(
+        database_url=sqlite_url(database_path),
+        alembic_ini_path=ALEMBIC_INI,
+    )
+
+    with sqlite3.connect(database_path) as connection:
+        columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(tts_jobs)")
+        }
+        revision = connection.execute(
+            "SELECT version_num FROM alembic_version"
+        ).fetchone()[0]
+    assert PROVIDER_FIELDS.issubset(columns)
+    assert revision == HEAD_REVISION
+
+
+@pytest.mark.asyncio
+async def test_migrations_backfill_existing_rows_with_capcut_provider_id(tmp_path):
+    database_path = tmp_path / "legacy_rows.db"
+    # Build a pre-batch legacy DB with one row, then migrate.
+    create_legacy_database(database_path)
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO tts_jobs (id, kind, text, text_hash, voice_type, "
+            "voice_display_name, language_code, rate, status, attempt_count, "
+            "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "job-legacy-1",
+                "generation",
+                "hello",
+                "hash-1",
+                "BV421_vivn_streaming",
+                "Voice",
+                "vi-VN",
+                1.0,
+                "completed",
+                0,
+                "2026-01-01T00:00:00Z",
+                "2026-01-01T00:00:00Z",
+            ),
+        )
+        connection.commit()
+
+    await run_database_migrations(
+        database_url=sqlite_url(database_path),
+        alembic_ini_path=ALEMBIC_INI,
+    )
+
+    with sqlite3.connect(database_path) as connection:
+        row = connection.execute(
+            "SELECT id, provider_id, audio_path FROM tts_jobs WHERE id = ?",
+            ("job-legacy-1",),
+        ).fetchone()
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(tts_jobs)")}
+    assert row[0] == "job-legacy-1"  # ID unchanged
+    assert row[1] == "capcut"  # backfilled via server_default
+    assert row[2] is None  # audio_path unchanged
+    assert PROVIDER_FIELDS.issubset(columns)
+
+
+@pytest.mark.asyncio
+async def test_migrations_adopt_current_unversioned_schema_with_provider_fields(tmp_path):
+    """An unversioned schema created by Base.metadata.create_all (which now
+    includes the provider fields) must be stamped at head, not adopted as
+    legacy (which would try to re-add columns and fail)."""
+    database_path = tmp_path / "current_unversioned.db"
+    engine = create_database_engine(sqlite_url(database_path))
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    await engine.dispose()
+
+    await run_database_migrations(
+        database_url=sqlite_url(database_path),
+        alembic_ini_path=ALEMBIC_INI,
+    )
+
+    with sqlite3.connect(database_path) as connection:
+        revision = connection.execute(
+            "SELECT version_num FROM alembic_version"
+        ).fetchone()[0]
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(tts_jobs)")}
+    assert revision == HEAD_REVISION
+    assert PROVIDER_FIELDS.issubset(columns)
+
+
+@pytest.mark.asyncio
+async def test_migrations_downgrade_drops_provider_fields(tmp_path):
+    database_path = tmp_path / "downgrade.db"
+
+    await run_database_migrations(
+        database_url=sqlite_url(database_path),
+        alembic_ini_path=ALEMBIC_INI,
+    )
+
+    from alembic import command
+    from alembic.config import Config
+    from app.services.database_migrations import _sync_database_url
+    from app.config import settings
+
+    config = Config(str(ALEMBIC_INI))
+    config.set_main_option("sqlalchemy.url", _sync_database_url(sqlite_url(database_path)))
+    config.attributes["database_url"] = _sync_database_url(sqlite_url(database_path))
+    config.attributes["configure_logger"] = False
+    # Downgrade to the previous revision (1ccaccfcb3f0) should drop provider fields.
+    command.downgrade(config, "1ccaccfcb3f0")
+
+    with sqlite3.connect(database_path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(tts_jobs)")}
+    assert not (PROVIDER_FIELDS & columns)

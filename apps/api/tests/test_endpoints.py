@@ -93,7 +93,46 @@ async def test_manual_retry_creates_new_job_and_preserves_original(
     assert retried.text == original.text
     assert retried.voice_type == original.voice_type
     assert retried.batch_id == original.batch_id
+    assert retried.provider_id == original.provider_id == "capcut"
     enqueue.assert_awaited_once_with(retried.id)
+
+
+@pytest.mark.asyncio
+async def test_manual_retry_preserves_vieneu_provider_id(
+    async_session,
+    monkeypatch,
+):
+    """A job tagged with provider_id='vieneu' must retry as a vieneu job,
+    not silently fall back to capcut. This guards the provider discriminator."""
+    original = TTSJobModel(
+        text="vieneu text",
+        text_hash="vieneu-hash",
+        voice_type="Minh Đức",
+        voice_display_name="Minh Đức",
+        language_code="vi-VN",
+        rate=1.0,
+        status="failed",
+        provider_id="vieneu",
+        backbone_id="v3turbo",
+        style="tu_nhien",
+        voice_profile_id="profile-42",
+        request_metadata='{"emotion":"chuckle"}',
+    )
+    async_session.add(original)
+    await async_session.commit()
+    original_id = original.id
+    enqueue = AsyncMock(return_value=True)
+    monkeypatch.setattr("app.api.v1.tts_jobs.queue_manager.enqueue", enqueue)
+
+    response = await retry_job_endpoint(original_id, session=async_session)
+
+    retried = await async_session.get(TTSJobModel, response.id)
+    assert retried is not None
+    assert retried.provider_id == "vieneu"
+    assert retried.backbone_id == "v3turbo"
+    assert retried.style == "tu_nhien"
+    assert retried.voice_profile_id == "profile-42"
+    assert retried.request_metadata == '{"emotion":"chuckle"}'
 
 
 @pytest.mark.asyncio

@@ -27,6 +27,7 @@ def get_pyinstaller_command() -> list[str]:
         "--paths", ".",
         "--hidden-import=aiosqlite",
         "--hidden-import=app.utils.audio_utils",
+        "--hidden-import=vieneu_core",
         "--add-data", "alembic.ini:.",
         "--add-data", "alembic:alembic",
         "--onefile",

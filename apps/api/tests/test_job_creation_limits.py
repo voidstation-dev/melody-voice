@@ -9,6 +9,7 @@ from app.main import app
 from app.models.tts_job import TTSJobModel
 from app.services.tts_service import (
     assert_batch_capacity,
+    create_tts_job,
     create_tts_job_with_batch_limits,
 )
 
@@ -129,3 +130,46 @@ async def test_concurrent_batch_admission_never_exceeds_limit(
     errors = [result for result in results if isinstance(result, HTTPException)]
     assert len(errors) == 1
     assert errors[0].detail == "BATCH_FILE_LIMIT_EXCEEDED"
+
+
+@pytest.mark.asyncio
+async def test_create_tts_job_persists_provider_fields(async_session):
+    """The service layer must persist provider_id and VieNeu-specific fields
+    so the worker can route jobs (Phase 5) and retries preserve the provider."""
+    job = await create_tts_job(
+        async_session,
+        text="vieneu service text",
+        voice_type="Minh Đức",
+        voice_display_name="Minh Đức",
+        language_code="vi-VN",
+        provider_id="vieneu",
+        backbone_id="v3turbo",
+        style="tu_nhien",
+        voice_profile_id="profile-1",
+        request_metadata='{"k":1}',
+    )
+    fetched = await async_session.get(TTSJobModel, job.id)
+    assert fetched is not None
+    assert fetched.provider_id == "vieneu"
+    assert fetched.backbone_id == "v3turbo"
+    assert fetched.style == "tu_nhien"
+    assert fetched.voice_profile_id == "profile-1"
+    assert fetched.request_metadata == '{"k":1}'
+
+
+@pytest.mark.asyncio
+async def test_create_tts_job_defaults_to_capcut_provider(async_session):
+    """Omitting provider_id must yield 'capcut' via the model server_default,
+    not NULL — otherwise a CapCut job could silently be miscategorized."""
+    job = await create_tts_job(
+        async_session,
+        text="capcut default text",
+        voice_type="BV421_vivn_streaming",
+        voice_display_name="Voice",
+        language_code="vi-VN",
+    )
+    fetched = await async_session.get(TTSJobModel, job.id)
+    assert fetched is not None
+    assert fetched.provider_id == "capcut"
+    assert fetched.backbone_id is None
+    assert fetched.style is None
