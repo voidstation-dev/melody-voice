@@ -79,6 +79,35 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
   const [downloadFormat, setDownloadFormat] = useState<"mp3" | "m4a" | null>(null);
   const [downloadingFormat, setDownloadingFormat] = useState<"mp3" | "m4a" | null>(null);
   
+  const seekIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const seekTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopSeeking = () => {
+    if (seekTimeoutRef.current) clearTimeout(seekTimeoutRef.current);
+    if (seekIntervalRef.current) clearInterval(seekIntervalRef.current);
+  };
+
+  const startSeeking = (direction: "forward" | "rewind") => {
+    if (!audioRef.current || !duration) return;
+    
+    // Immediate jump (10s)
+    const jump = direction === "forward" ? 10 : -10;
+    let newTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + jump));
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+
+    // Wait 400ms before continuous seeking
+    seekTimeoutRef.current = setTimeout(() => {
+      seekIntervalRef.current = setInterval(() => {
+        if (!audioRef.current || !duration) return;
+        const step = direction === "forward" ? 2 : -2;
+        let t = Math.max(0, Math.min(duration, audioRef.current.currentTime + step));
+        audioRef.current.currentTime = t;
+        setCurrentTime(t);
+      }, 100);
+    }, 400);
+  };
+
   const sliderRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -336,13 +365,12 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
           <div className="flex-1 flex items-center gap-1.5 rounded-lg bg-muted/40 border border-border/50 p-1 pl-1.5 pr-2.5 h-8 shadow-sm">
             <div className="flex items-center gap-0.5 flex-none">
               <button
-                onClick={() => {
-                  if (audioRef.current) {
-                    audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 10);
-                  }
-                }}
-                className="flex items-center justify-center h-6 w-6 rounded-md bg-background shadow-sm hover:bg-muted text-muted-foreground transition-all"
-                title="Rewind 10s"
+                onPointerDown={() => startSeeking("rewind")}
+                onPointerUp={stopSeeking}
+                onPointerLeave={stopSeeking}
+                onContextMenu={(e) => e.preventDefault()}
+                className="flex items-center justify-center h-6 w-6 rounded-md bg-background shadow-sm hover:bg-muted text-muted-foreground transition-all select-none"
+                title="Rewind 10s (Hold to seek continuously)"
               >
                 <Rewind className="h-3 w-3" />
               </button>
@@ -357,13 +385,12 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
                 {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 ml-0.5" />}
               </button>
               <button
-                onClick={() => {
-                  if (audioRef.current && duration) {
-                    audioRef.current.currentTime = Math.min(duration, audioRef.current.currentTime + 10);
-                  }
-                }}
-                className="flex items-center justify-center h-6 w-6 rounded-md bg-background shadow-sm hover:bg-muted text-muted-foreground transition-all"
-                title="Forward 10s"
+                onPointerDown={() => startSeeking("forward")}
+                onPointerUp={stopSeeking}
+                onPointerLeave={stopSeeking}
+                onContextMenu={(e) => e.preventDefault()}
+                className="flex items-center justify-center h-6 w-6 rounded-md bg-background shadow-sm hover:bg-muted text-muted-foreground transition-all select-none"
+                title="Forward 10s (Hold to seek continuously)"
               >
                 <FastForward className="h-3 w-3" />
               </button>
