@@ -1,7 +1,7 @@
 Metadata-Version: 2.4
 Name: capvoice-api
 Version: 0.1.0
-Requires-Python: >=3.9
+Requires-Python: >=3.10
 Requires-Dist: fastapi>=0.110.0
 Requires-Dist: uvicorn[standard]>=0.28.0
 Requires-Dist: pydantic-settings>=2.2.0
@@ -13,4 +13,6 @@ Requires-Dist: tenacity>=8.2.0
 Requires-Dist: greenlet>=3.0.0
 Requires-Dist: alembic>=1.16.5
 Requires-Dist: capcut-tts-api
+Requires-Dist: vieneu-core
+Requires-Dist: vieneu
 Requires-Dist: pyinstaller>=6.21.0

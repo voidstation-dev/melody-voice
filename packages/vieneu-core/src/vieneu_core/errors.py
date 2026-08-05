@@ -8,7 +8,6 @@ string constants so they stay stable across the core↔adapter boundary.
 
 from __future__ import annotations
 
-
 # Error code constants — stable across the core↔adapter boundary.
 MODEL_NOT_AVAILABLE = "MODEL_NOT_AVAILABLE"
 VOICE_NOT_FOUND = "VOICE_NOT_FOUND"
@@ -32,7 +31,9 @@ class VieneuCoreError(Exception):
 
     code: str = "VIENEU_CORE_ERROR"
 
-    def __init__(self, *, message: str, retryable: bool = False, code: str | None = None):
+    def __init__(
+        self, *, message: str, retryable: bool = False, code: str | None = None
+    ):
         super().__init__(message)
         self.message = message
         self.retryable = retryable
@@ -45,7 +46,9 @@ class ModelNotAvailableError(VieneuCoreError):
 
     code = MODEL_NOT_AVAILABLE
 
-    def __init__(self, *, message: str = "VieNeu model is not available", retryable: bool = True):
+    def __init__(
+        self, *, message: str = "VieNeu model is not available", retryable: bool = True
+    ):
         super().__init__(message=message, retryable=retryable, code=self.code)
 
 
@@ -54,7 +57,9 @@ class ModelLoadFailedError(VieneuCoreError):
 
     code = MODEL_LOAD_FAILED
 
-    def __init__(self, *, message: str = "Failed to load VieNeu model", retryable: bool = False):
+    def __init__(
+        self, *, message: str = "Failed to load VieNeu model", retryable: bool = False
+    ):
         super().__init__(message=message, retryable=retryable, code=self.code)
 
 
@@ -99,7 +104,9 @@ class InvalidVoiceError(VieneuCoreError):
 class InferenceError(VieneuCoreError):
     code = INFERENCE_ERROR
 
-    def __init__(self, *, message: str = "VieNeu inference failed", retryable: bool = True):
+    def __init__(
+        self, *, message: str = "VieNeu inference failed", retryable: bool = True
+    ):
         super().__init__(message=message, retryable=retryable, code=self.code)
 
 
@@ -108,7 +115,12 @@ class CloningConsentError(VieneuCoreError):
 
     code = CLONING_CONSENT_REQUIRED
 
-    def __init__(self, *, message: str = "Voice cloning requires explicit consent", retryable: bool = False):
+    def __init__(
+        self,
+        *,
+        message: str = "Voice cloning requires explicit consent",
+        retryable: bool = False,
+    ):
         super().__init__(message=message, retryable=retryable, code=self.code)
 
 
@@ -117,5 +129,7 @@ class ResourceBusyError(VieneuCoreError):
 
     code = RESOURCE_BUSY
 
-    def __init__(self, *, message: str = "VieNeu engine is busy", retryable: bool = True):
+    def __init__(
+        self, *, message: str = "VieNeu engine is busy", retryable: bool = True
+    ):
         super().__init__(message=message, retryable=retryable, code=self.code)

@@ -1,3 +1,6 @@
 [submodule "vendor/capcut-tts-api"]
 	path = vendor/capcut-tts-api
 	url = https://github.com/K07VN/capcut-tts-api
+[submodule "vendor/vieneu-tts"]
+	path = vendor/vieneu-tts
+	url = https://github.com/pnnbao97/VieNeu-TTS.git

@@ -5,6 +5,7 @@ no VieNeu engine, no FastAPI. They verify the stable surface is well-formed
 and that fixtures are deterministic.
 """
 
+import dataclasses
 import struct
 
 import pytest
@@ -15,9 +16,7 @@ from vieneu_core import (
     InvalidStyleError,
     InvalidTextError,
     ModelNotAvailableError,
-    ProviderDescriptor,
     Style,
-    SynthesizeRequest,
     SynthesizeResult,
     Voice,
     VoiceNotFoundError,
@@ -34,10 +33,10 @@ from vieneu_core.fixtures import (
 
 def test_contracts_are_frozen():
     voice = FIXTURE_VOICES[0]
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         voice.voice_id = "other"  # type: ignore[misc]
     style = FIXTURE_STYLES[0]
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         style.id = "other"  # type: ignore[misc]
 
 
@@ -78,6 +77,7 @@ def test_fixture_voices_are_preset_and_deterministic():
     assert FIXTURE_VOICES[0].voice_id == "Minh Đức"
     # Re-importing should yield identical objects (deterministic).
     from vieneu_core.fixtures import FIXTURE_VOICES as again
+
     assert again == FIXTURE_VOICES
 
 
@@ -142,5 +142,5 @@ def test_voice_and_style_dataclasses_fields():
 
 def test_synthesize_request_is_frozen():
     req = make_synthesize_request()
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         req.text = "mutated"  # type: ignore[misc]

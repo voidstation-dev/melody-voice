@@ -12,7 +12,7 @@ Phase 4/5; this module only defines the shape it must conform to.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol
 
