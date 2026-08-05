@@ -74,6 +74,11 @@ def _build_tts_job(
     batch_position: int | None = None,
     source_file_name: str | None = None,
     source_file_size: int | None = None,
+    provider_id: str = "capcut",
+    backbone_id: str | None = None,
+    style: str | None = None,
+    voice_profile_id: str | None = None,
+    request_metadata: str | None = None,
 ) -> TTSJobModel:
     cleaned_text = text.strip()
     return TTSJobModel(
@@ -90,6 +95,11 @@ def _build_tts_job(
         batch_position=batch_position,
         source_file_name=source_file_name,
         source_file_size=source_file_size,
+        provider_id=provider_id,
+        backbone_id=backbone_id,
+        style=style,
+        voice_profile_id=voice_profile_id,
+        request_metadata=request_metadata,
     )
 
 async def create_tts_job(
@@ -106,6 +116,11 @@ async def create_tts_job(
     batch_position: int | None = None,
     source_file_name: str | None = None,
     source_file_size: int | None = None,
+    provider_id: str = "capcut",
+    backbone_id: str | None = None,
+    style: str | None = None,
+    voice_profile_id: str | None = None,
+    request_metadata: str | None = None,
 ) -> TTSJobModel:
     job = _build_tts_job(
         text=text,
@@ -119,6 +134,11 @@ async def create_tts_job(
         batch_position=batch_position,
         source_file_name=source_file_name,
         source_file_size=source_file_size,
+        provider_id=provider_id,
+        backbone_id=backbone_id,
+        style=style,
+        voice_profile_id=voice_profile_id,
+        request_metadata=request_metadata,
     )
     session.add(job)
     await session.commit()
@@ -142,6 +162,11 @@ async def create_tts_job_with_batch_limits(
     batch_position: int | None = None,
     source_file_name: str | None = None,
     source_file_size: int | None = None,
+    provider_id: str = "capcut",
+    backbone_id: str | None = None,
+    style: str | None = None,
+    voice_profile_id: str | None = None,
+    request_metadata: str | None = None,
 ) -> TTSJobModel:
     try:
         # SQLite has no row-level locks. BEGIN IMMEDIATE serializes the
@@ -166,6 +191,11 @@ async def create_tts_job_with_batch_limits(
             batch_position=batch_position,
             source_file_name=source_file_name,
             source_file_size=source_file_size,
+            provider_id=provider_id,
+            backbone_id=backbone_id,
+            style=style,
+            voice_profile_id=voice_profile_id,
+            request_metadata=request_metadata,
         )
         session.add(job)
         await session.commit()

@@ -30,6 +30,7 @@ def serialize_job(job: TTSJobModel) -> TTSJobResponse:
         voiceDisplayName=job.voice_display_name,
         resourceId=job.resource_id,
         rate=job.rate,
+        providerId=job.provider_id,
         status=job.status,
         progress=job.progress,
         batchId=job.batch_id,
@@ -231,6 +232,11 @@ async def retry_job_endpoint(job_id: str, session: AsyncSession = Depends(get_as
         "batch_position": job.batch_position,
         "source_file_name": job.source_file_name,
         "source_file_size": job.source_file_size,
+        "provider_id": job.provider_id,
+        "backbone_id": job.backbone_id,
+        "style": job.style,
+        "voice_profile_id": job.voice_profile_id,
+        "request_metadata": job.request_metadata,
     }
     if job.batch_id:
         retried_job = await create_tts_job_with_batch_limits(

@@ -18,6 +18,7 @@ class TTSJobResponse(BaseModel):
     voiceDisplayName: str
     resourceId: str | None
     rate: float
+    providerId: str | None = None
     status: str
     progress: int | None = None
     batchId: str | None = None

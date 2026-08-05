@@ -75,7 +75,14 @@ LEGACY_ADDITIONS = {
 # (e.g. created by Base.metadata.create_all) and must be stamped at head rather
 # than adopted as legacy, otherwise the head migration would try to re-add the
 # column and fail with "duplicate column name".
-POST_BASELINE_COLUMNS = {"audio_duration"}
+POST_BASELINE_COLUMNS = {
+    "audio_duration",
+    "provider_id",
+    "backbone_id",
+    "style",
+    "voice_profile_id",
+    "request_metadata",
+}
 
 
 class MigrationError(RuntimeError):
