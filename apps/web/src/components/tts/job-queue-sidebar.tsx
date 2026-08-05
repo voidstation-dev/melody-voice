@@ -233,21 +233,23 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
               <button className="flex items-center justify-center h-6 w-6 rounded-md hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-500 transition-colors">
                 {downloadingFormat ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
               </button>
-              <div className="absolute top-full mt-1.5 right-0 bg-background border border-border shadow-md rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto flex flex-col min-w-[70px] z-50 overflow-hidden">
-                <button
-                  onClick={() => handleDownloadClick("mp3")}
-                  disabled={downloadingFormat !== null}
-                  className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-left hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                >
-                  MP3
-                </button>
-                <button
-                  onClick={() => handleDownloadClick("m4a")}
-                  disabled={downloadingFormat !== null}
-                  className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-left hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border-t border-border/50 disabled:opacity-50"
-                >
-                  M4A
-                </button>
+              <div className="absolute top-full right-0 pt-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto z-50">
+                <div className="bg-background border border-border shadow-md rounded-md flex flex-col min-w-[70px] overflow-hidden">
+                  <button
+                    onClick={() => handleDownloadClick("mp3")}
+                    disabled={downloadingFormat !== null}
+                    className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-left hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                  >
+                    MP3
+                  </button>
+                  <button
+                    onClick={() => handleDownloadClick("m4a")}
+                    disabled={downloadingFormat !== null}
+                    className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-left hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border-t border-border/50 disabled:opacity-50"
+                  >
+                    M4A
+                  </button>
+                </div>
               </div>
             </div>
           )}
