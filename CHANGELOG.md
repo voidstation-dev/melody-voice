@@ -4,6 +4,18 @@ All notable changes to VoidMelody Desktop are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] - 2026-08-05
+
+### Added
+
+- Added ability to configure custom download paths for batch imports and manual job downloads.
+- Backend now automatically copies generated audio files to the specified export folder (MP3/M4A).
+- Native desktop folder picker for selecting export directories.
+
+### Fixed
+
+- Resolved React Hook dependencies and useEffect warnings.
+
 ## [0.2.4] - 2026-08-04
 
 ### Fixed
