@@ -1,11 +1,14 @@
+from unittest.mock import AsyncMock
+
 import pytest
 from fastapi import HTTPException
-from unittest.mock import AsyncMock
+from httpx import ASGITransport, AsyncClient
+
 from app.api.v1.tts_jobs import retry_job_endpoint
 from app.config import settings
-from app.models.tts_job import TTSJobModel
-from httpx import AsyncClient, ASGITransport
 from app.main import app
+from app.models.tts_job import TTSJobModel
+
 
 @pytest.mark.asyncio
 async def test_health_endpoint():

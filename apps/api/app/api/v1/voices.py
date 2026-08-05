@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
+
 from app.schemas.voice import VoiceListResponse, VoiceResponse
 from app.services.voice_catalog import voice_catalog
 

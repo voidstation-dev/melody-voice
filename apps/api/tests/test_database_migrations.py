@@ -1,5 +1,5 @@
-import sqlite3
 import logging
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -10,7 +10,6 @@ from app.services.database_migrations import (
     MigrationError,
     run_database_migrations,
 )
-
 
 ALEMBIC_INI = Path(__file__).parents[1] / "alembic.ini"
 HEAD_REVISION = "a3f1c9d2e7b4"
@@ -304,10 +303,10 @@ async def test_migrations_downgrade_drops_provider_fields(tmp_path):
         alembic_ini_path=ALEMBIC_INI,
     )
 
-    from alembic import command
     from alembic.config import Config
+
+    from alembic import command
     from app.services.database_migrations import _sync_database_url
-    from app.config import settings
 
     config = Config(str(ALEMBIC_INI))
     config.set_main_option("sqlalchemy.url", _sync_database_url(sqlite_url(database_path)))

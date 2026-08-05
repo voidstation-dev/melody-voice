@@ -1,7 +1,8 @@
-import platform
-import subprocess
-import shutil
 import os
+import platform
+import shutil
+import subprocess
+
 
 def get_target_triple():
     system = platform.system().lower()

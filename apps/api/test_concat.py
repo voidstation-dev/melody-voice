@@ -1,7 +1,7 @@
 import asyncio
-from pathlib import Path
 import os
-import sys
+from pathlib import Path
+
 
 async def combine_audio_parts(
     parts: list[Path],

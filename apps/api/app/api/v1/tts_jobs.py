@@ -1,21 +1,27 @@
-import uuid
 import logging
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import settings
 from app.database import get_async_session
 from app.models.tts_job import TTSJobModel
-from app.schemas.tts import CreateTTSJobRequest, TTSJobListResponse, TTSJobResponse, BatchJobCreateResponse
+from app.schemas.tts import (
+    BatchJobCreateResponse,
+    CreateTTSJobRequest,
+    TTSJobListResponse,
+    TTSJobResponse,
+)
 from app.services.tts_service import (
     create_tts_job,
     create_tts_job_with_batch_limits,
     get_job_by_id,
     list_jobs,
 )
-from app.workers.tts_worker import execute_tts_job_step
-from app.utils.text_utils import split_text_into_chunks, slugify_vietnamese
 from app.services.voice_catalog import voice_catalog
+from app.utils.text_utils import slugify_vietnamese
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -50,6 +56,7 @@ def serialize_job(job: TTSJobModel) -> TTSJobResponse:
     )
 
 from app.workers.queue_manager import queue_manager
+
 
 @router.post("/tts/jobs", status_code=status.HTTP_202_ACCEPTED, response_model=BatchJobCreateResponse)
 async def create_job_endpoint(
@@ -123,8 +130,10 @@ async def get_job_endpoint(job_id: str, session: AsyncSession = Depends(get_asyn
         raise HTTPException(status_code=404, detail="JOB_NOT_FOUND")
     return serialize_job(job)
 
-from app.utils.audio_utils import convert_mp3_to_m4a
 import os
+
+from app.utils.audio_utils import convert_mp3_to_m4a
+
 
 @router.get("/tts/jobs/{job_id}/audio")
 async def stream_audio_endpoint(

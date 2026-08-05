@@ -3,6 +3,7 @@ from pathlib import Path
 
 from app.services.provider_response_parser import extract_audio_urls
 
+
 def test_extract_audio_urls_nested_json():
     fixture_path = (
         Path(__file__).parent / "fixtures" / "capcut_success_redacted.json"

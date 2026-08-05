@@ -6,7 +6,6 @@ from starlette.requests import Request
 
 from app.config import settings
 
-
 PUBLIC_PATHS = {
     "/api/v1/health",
     "/api/v1/health/live",

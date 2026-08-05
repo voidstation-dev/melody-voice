@@ -3,13 +3,12 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy.engine import make_url
 
+from alembic import command
 from app.config import settings
-
 
 BASELINE_REVISION = "37c7b24d235a"
 LEGACY_CORE_COLUMNS = {

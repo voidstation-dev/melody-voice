@@ -10,16 +10,16 @@ the correct TTS provider (CapCut legacy or VieNeu). Existing rows
 automatically receive provider_id='capcut' via the column server default, so
 old jobs keep their provider and retry behavior.
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision: str = "a3f1c9d2e7b4"
-down_revision: Union[str, Sequence[str], None] = "1ccaccfcb3f0"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "1ccaccfcb3f0"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

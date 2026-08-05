@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+
 @dataclass(frozen=True)
 class ProviderVoice:
     language_short: str
@@ -14,10 +15,11 @@ class ProviderVoice:
 class ProviderResult:
     raw_response: dict[str, Any]
     audio_urls: list[str]
+    local_paths: list[str] | None = None
 
 class TTSProvider(Protocol):
-    def list_voices(self, language: str | None = None) -> list[ProviderVoice]: ...
-    def synthesize(
+    async def list_voices(self, language: str | None = None) -> list[ProviderVoice]: ...
+    async def synthesize(
         self,
         *,
         text: str,

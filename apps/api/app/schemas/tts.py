@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 
+
 class CreateTTSJobRequest(BaseModel):
     text: str = Field(min_length=1, max_length=500000)
     voiceType: str = Field(min_length=1, max_length=150)

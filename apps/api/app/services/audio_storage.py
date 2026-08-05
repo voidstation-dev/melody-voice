@@ -4,7 +4,6 @@ import httpx
 
 from app.exceptions import TTSJobError
 
-
 ALLOWED_CONTENT_TYPES = {
     "audio/mpeg",
     "audio/mp3",
