@@ -3,9 +3,24 @@ from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.database import Base, get_async_session
 from app.main import app
 
+# Create a test database engine
+test_engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+TestSessionLocal = async_sessionmaker(
+    test_engine, class_=AsyncSession, expire_on_commit=False
+)
+
+async def override_get_async_session():
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    async with TestSessionLocal() as session:
+        yield session
+
+app.dependency_overrides[get_async_session] = override_get_async_session
 
 @pytest.mark.asyncio
 async def test_clone_voice_no_consent():
