@@ -20,6 +20,8 @@ export type TTSJob = {
   fileSize: number | null
   errorCode: string | null
   errorMessage: string | null
+  exportPath: string | null
+  exportFormat: string | null
   createdAt: string
   startedAt: string | null
   updatedAt: string

@@ -13,16 +13,29 @@
     {
       "identifier": "shell:allow-execute",
       "allow": [
-        { "name": "bin/melody-api", "sidecar": true },
-        { "name": "bin/ffmpeg", "sidecar": true }
+        {
+          "name": "bin/melody-api",
+          "sidecar": true
+        },
+        {
+          "name": "bin/ffmpeg",
+          "sidecar": true
+        }
       ]
     },
     {
       "identifier": "shell:allow-spawn",
       "allow": [
-        { "name": "bin/melody-api", "sidecar": true },
-        { "name": "bin/ffmpeg", "sidecar": true }
+        {
+          "name": "bin/melody-api",
+          "sidecar": true
+        },
+        {
+          "name": "bin/ffmpeg",
+          "sidecar": true
+        }
       ]
-    }
+    },
+    "dialog:default"
   ]
 }

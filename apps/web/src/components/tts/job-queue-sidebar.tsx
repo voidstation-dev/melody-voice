@@ -182,32 +182,33 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
     setDownloadOpen(true);
   };
 
-  const handleStartDownload = async (format: "mp3" | "m4a", fileName: string) => {
-    if (!job.downloadUrl || !fileName.trim()) return;
+  const handleStartDownload = async (format: "mp3" | "m4a", pathOrName: string) => {
+    if (!job.downloadUrl || !pathOrName.trim()) return;
     setDownloadingFormat(format);
     try {
-      const blob = await apiFetchBlob(`${job.downloadUrl}?format=${format}`);
-      const finalFileName = `${fileName.trim()}.${format}`;
-      // Import downloadBlob at the top! Wait, downloadBlob is in utils, which we import from apiFetchBlob is. We will import downloadBlob above.
-      // Actually we will use the same downloadBlob logic here.
-      // Let's create an anchor directly since downloadBlob is in @/lib/utils but we might not have imported it in this file.
-      // Wait, we can import it in job-queue-sidebar.tsx.
-      // Let's check imports first.
-      
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.style.display = "none";
-      a.href = url;
-      a.download = finalFileName;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      }, 100);
-      
+      // If pathOrName contains a path separator, it's an absolute path from Tauri dialog
+      if (pathOrName.includes("/") || pathOrName.includes("\\")) {
+        const { exportJobAudio } = await import("@/lib/api-client");
+        await exportJobAudio(job.id, format, pathOrName);
+      } else {
+        // Fallback for Web/Browser
+        const blob = await apiFetchBlob(`${job.downloadUrl}?format=${format}`);
+        const finalFileName = `${pathOrName.trim()}.${format}`;
+        
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.style.display = "none";
+        a.href = url;
+        a.download = finalFileName;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }, 100);
+      }
     } catch (err) {
-      console.error("Download failed:", err);
+      console.error("Download/Export failed:", err);
     } finally {
       setDownloadingFormat(null);
     }

@@ -2,13 +2,16 @@ import { useState, useEffect } from "react";
 import { Download, X, FileAudio } from "lucide-react";
 import { getFirstLine, slugify } from "@/lib/utils";
 import { TTSJob } from "@/types/tts-job";
+import { useTauri } from "@/contexts/tauri-provider";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { downloadDir, join } from "@tauri-apps/api/path";
 
 type AudioDownloadDialogProps = {
   isOpen: boolean;
   onClose: () => void;
   job: TTSJob | null;
   format: "mp3" | "m4a";
-  onStartDownload: (fileName: string) => void;
+  onStartDownload: (fileNameOrPath: string) => void;
 };
 
 export function AudioDownloadDialog({
@@ -19,6 +22,31 @@ export function AudioDownloadDialog({
   onStartDownload,
 }: AudioDownloadDialogProps) {
   const [fileName, setFileName] = useState("");
+  const { isDesktop } = useTauri();
+  const [exportPath, setExportPath] = useState<string>("");
+
+  useEffect(() => {
+    if (isDesktop && isOpen && !exportPath) {
+      downloadDir().then(dir => setExportPath(dir)).catch(console.error);
+    }
+  }, [isDesktop, isOpen, exportPath]);
+
+  const handleSelectFolder = async () => {
+    if (!isDesktop) return;
+    try {
+      const selected = await openDialog({
+        directory: true,
+        multiple: false,
+        defaultPath: exportPath || undefined,
+        title: "Select Download Directory"
+      });
+      if (selected && typeof selected === "string") {
+        setExportPath(selected);
+      }
+    } catch (err) {
+      console.error("Failed to select folder", err);
+    }
+  };
 
   useEffect(() => {
     if (isOpen && job) {
@@ -46,9 +74,19 @@ export function AudioDownloadDialog({
 
   if (!isOpen || !job) return null;
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!fileName.trim()) return;
-    onStartDownload(fileName.trim());
+    if (isDesktop && exportPath) {
+      try {
+        const fullPath = await join(exportPath, `${fileName.trim()}.${format}`);
+        onStartDownload(fullPath);
+      } catch (err) {
+        console.error("Failed to join path", err);
+        onStartDownload(fileName.trim()); // Fallback
+      }
+    } else {
+      onStartDownload(fileName.trim());
+    }
   };
 
   return (
@@ -79,27 +117,49 @@ export function AudioDownloadDialog({
           </button>
         </div>
 
-        <div className="mb-6 flex flex-col gap-2">
-          <label className="text-xs font-medium text-muted-foreground ml-1">File Name</label>
-          <div className="relative flex items-center">
-            <input
-              type="text"
-              value={fileName}
-              onChange={(e) => setFileName(e.target.value)}
-              className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none transition-colors focus:border-primary pr-12"
-              placeholder="audio-filename"
-              autoFocus
-            />
-            <span className="absolute right-4 text-sm text-muted-foreground pointer-events-none">
-              .{format}
-            </span>
+        <div className="mb-6 flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-medium text-muted-foreground ml-1">File Name</label>
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                value={fileName}
+                onChange={(e) => setFileName(e.target.value)}
+                className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none transition-colors focus:border-primary pr-12"
+                placeholder="audio-filename"
+                autoFocus
+              />
+              <span className="absolute right-4 text-sm text-muted-foreground pointer-events-none">
+                .{format}
+              </span>
+            </div>
           </div>
+
+          {isDesktop && (
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-medium text-muted-foreground ml-1">Location</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={exportPath || ""}
+                  className="flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground focus:outline-none opacity-80"
+                />
+                <button
+                  onClick={handleSelectFolder}
+                  className="px-4 py-2.5 bg-secondary text-secondary-foreground rounded-xl text-sm font-bold hover:brightness-110 transition-all border border-border/50"
+                >
+                  Change
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-2">
           <button
             onClick={handleDownload}
-            disabled={!fileName.trim()}
+            disabled={!fileName.trim() || (isDesktop && !exportPath)}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-all"
           >
             <Download className="h-4 w-4" />

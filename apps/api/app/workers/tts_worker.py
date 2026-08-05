@@ -254,6 +254,50 @@ async def execute_tts_job_step(
             job.audio_duration = audio_duration
             job.progress = 100
             job.completed_at = datetime.now(timezone.utc)
+            
+            if job.export_path:
+                try:
+                    import shutil
+                    export_dir = Path(job.export_path)
+                    export_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    if job.source_file_name:
+                        base_name = Path(job.source_file_name).stem
+                    else:
+                        first_line = job.text.split("\n")[0][:30].strip()
+                        import re
+                        safe_name = re.sub(r'[^a-zA-Z0-9\-_ ]', '', first_line).strip()
+                        base_name = safe_name or f"melody-{job.id}"
+                        
+                    format_ext = job.export_format or "mp3"
+                    export_file = export_dir / f"{base_name}.{format_ext}"
+                    
+                    if format_ext == "mp3":
+                        shutil.copy2(final_destination, export_file)
+                    else:
+                        ffmpeg_binary = settings.ffmpeg_binary_path
+                        command = [
+                            ffmpeg_binary,
+                            "-y",
+                            "-i",
+                            str(final_destination),
+                            "-c:a",
+                            "aac",
+                            "-b:a",
+                            "256k",
+                            str(export_file),
+                        ]
+                        process = await asyncio.create_subprocess_exec(
+                            *command,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
+                        )
+                        _, stderr = await process.communicate()
+                        if process.returncode != 0:
+                            logger.error(f"Auto-export to {format_ext} failed: {stderr}")
+                except Exception as e:
+                    logger.error(f"Auto-export failed for {job.id}: {e}")
+
             logger.info(
                 "TTS job completed",
                 extra={

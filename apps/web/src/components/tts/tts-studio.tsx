@@ -66,7 +66,12 @@ export function TTSStudio() {
     }
   };
 
-  const handleStartBatchJobs = async (selectedFiles: ImportedTextFile[]) => {
+  const handleStartBatchJobs = async (
+    selectedFiles: ImportedTextFile[],
+    exportPath: string | null,
+    exportFormat: "mp3" | "m4a"
+  ) => {
+    if (selectedFiles.length === 0) return;
     const limitError = getBatchLimitError(selectedFiles);
     if (limitError === "BATCH_FILE_LIMIT_EXCEEDED") {
       alert("A batch can contain at most 50 files.");
@@ -94,6 +99,8 @@ export function TTSStudio() {
             sourceFileSize: file.sizeBytes,
             batchId: batchId,
             batchPosition: i,
+            exportPath: exportPath,
+            exportFormat: exportFormat,
           }),
         });
         createdJobs.push(...batchResponse.jobs);
