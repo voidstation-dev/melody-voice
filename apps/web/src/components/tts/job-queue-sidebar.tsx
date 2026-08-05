@@ -1,6 +1,6 @@
 "use client";
 import { useQueue } from "@/hooks/use-queue";
-import { Loader2, CheckCircle2, XCircle, Clock, Play, Pause, Trash2, RotateCcw, Layers, CornerUpLeft, RefreshCw } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Clock, Play, Pause, Trash2, RotateCcw, Layers, CornerUpLeft, RefreshCw, Rewind, FastForward, Download } from "lucide-react";
 import { TTSJob } from "@/types/tts-job";
 import { apiFetchBlob } from "@/lib/api-client";
 import { useEffect, useState, useRef } from "react";
@@ -228,6 +228,30 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
             </div>
           )}
 
+          {job.status === "completed" && job.audioUrl && (
+            <div className="relative group flex items-center justify-center">
+              <button className="flex items-center justify-center h-6 w-6 rounded-md hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-500 transition-colors">
+                {downloadingFormat ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              </button>
+              <div className="absolute top-full mt-1.5 right-0 bg-background border border-border shadow-md rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto flex flex-col min-w-[70px] z-50 overflow-hidden">
+                <button
+                  onClick={() => handleDownloadClick("mp3")}
+                  disabled={downloadingFormat !== null}
+                  className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-left hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                >
+                  MP3
+                </button>
+                <button
+                  onClick={() => handleDownloadClick("m4a")}
+                  disabled={downloadingFormat !== null}
+                  className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-left hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border-t border-border/50 disabled:opacity-50"
+                >
+                  M4A
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="relative group flex items-center justify-center">
             <button 
               onClick={() => setPreviewOpen(true)}
@@ -277,20 +301,44 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
       {/* FOOTER: Audio Player & Formats */}
       {job.status === "completed" && job.audioUrl && (
         <div className="flex items-center gap-2 pt-0.5 relative z-20">
-          <div className="flex-1 flex items-center gap-2 rounded-lg bg-muted/40 border border-border/50 p-1 pl-1.5 pr-2.5 h-8 shadow-sm">
-            <button
-              onClick={togglePlay}
-              className={`flex-none flex items-center justify-center h-6 w-6 rounded-md transition-all ${
-                playing 
-                  ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20" 
-                  : "bg-background shadow-sm hover:bg-primary/10 hover:text-primary text-muted-foreground"
-              }`}
-            >
-              {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 ml-0.5" />}
-            </button>
+          <div className="flex-1 flex items-center gap-1.5 rounded-lg bg-muted/40 border border-border/50 p-1 pl-1.5 pr-2.5 h-8 shadow-sm">
+            <div className="flex items-center gap-0.5 flex-none">
+              <button
+                onClick={() => {
+                  if (audioRef.current) {
+                    audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 10);
+                  }
+                }}
+                className="flex items-center justify-center h-6 w-6 rounded-md bg-background shadow-sm hover:bg-muted text-muted-foreground transition-all"
+                title="Rewind 10s"
+              >
+                <Rewind className="h-3 w-3" />
+              </button>
+              <button
+                onClick={togglePlay}
+                className={`flex items-center justify-center h-6 w-6 rounded-md transition-all ${
+                  playing 
+                    ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20" 
+                    : "bg-background shadow-sm hover:bg-primary/10 hover:text-primary text-muted-foreground"
+                }`}
+              >
+                {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 ml-0.5" />}
+              </button>
+              <button
+                onClick={() => {
+                  if (audioRef.current && duration) {
+                    audioRef.current.currentTime = Math.min(duration, audioRef.current.currentTime + 10);
+                  }
+                }}
+                className="flex items-center justify-center h-6 w-6 rounded-md bg-background shadow-sm hover:bg-muted text-muted-foreground transition-all"
+                title="Forward 10s"
+              >
+                <FastForward className="h-3 w-3" />
+              </button>
+            </div>
             
             <div 
-              className="flex-1 h-1.5 bg-border/50 rounded-full overflow-hidden cursor-pointer relative"
+              className="flex-1 h-2 bg-border/50 rounded-full overflow-hidden cursor-pointer relative group"
               onClick={(e) => {
                 if (!audioRef.current || !duration) return;
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -303,6 +351,8 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
                 className="absolute top-0 left-0 h-full bg-primary transition-all duration-100 ease-linear"
                 style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
               />
+              {/* Hover indicator for easier dragging */}
+              <div className="absolute top-0 left-0 w-full h-full opacity-0 group-hover:opacity-10 transition-opacity bg-primary" />
             </div>
             
             <div className="flex items-center gap-1 flex-none text-[9px] font-medium text-muted-foreground/80 tabular-nums">
@@ -310,23 +360,6 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
               <span>/</span>
               <span className="text-primary/70">{formatTime(duration || job.audioDuration || 0)}</span>
             </div>
-          </div>
-          
-          <div className="flex-none flex items-center gap-1.5">
-            <button
-              onClick={() => handleDownloadClick("mp3")}
-              disabled={downloadingFormat !== null}
-              className="flex items-center justify-center px-2 py-1.5 h-8 rounded-lg border border-border bg-background hover:bg-muted text-[9px] font-extrabold tracking-wider text-muted-foreground hover:text-foreground transition-colors shadow-sm disabled:opacity-50"
-            >
-              {downloadingFormat === "mp3" ? <Loader2 className="h-3 w-3 animate-spin" /> : "MP3"}
-            </button>
-            <button
-              onClick={() => handleDownloadClick("m4a")}
-              disabled={downloadingFormat !== null}
-              className="flex items-center justify-center px-2 py-1.5 h-8 rounded-lg border border-border bg-background hover:bg-muted text-[9px] font-extrabold tracking-wider text-muted-foreground hover:text-foreground transition-colors shadow-sm disabled:opacity-50"
-            >
-              {downloadingFormat === "m4a" ? <Loader2 className="h-3 w-3 animate-spin" /> : "M4A"}
-            </button>
           </div>
         </div>
       )}
