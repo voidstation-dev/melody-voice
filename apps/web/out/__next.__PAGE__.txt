@@ -1,0 +1,8 @@
+1:"$Sreact.fragment"
+2:I[17066,["/_next/static/chunks/2q1mt1favngdx.js","/_next/static/chunks/0n483ivefo0-k.js","/_next/static/chunks/267k_9nadfz4u.js","/_next/static/chunks/1uul906pbgbjw.js","/_next/static/chunks/357gkpwwfx19i.js"],"AppHeader"]
+3:I[59068,["/_next/static/chunks/2q1mt1favngdx.js","/_next/static/chunks/0n483ivefo0-k.js","/_next/static/chunks/267k_9nadfz4u.js","/_next/static/chunks/1uul906pbgbjw.js","/_next/static/chunks/357gkpwwfx19i.js"],"AppSidebar"]
+4:I[87441,["/_next/static/chunks/2q1mt1favngdx.js","/_next/static/chunks/0n483ivefo0-k.js","/_next/static/chunks/267k_9nadfz4u.js","/_next/static/chunks/1uul906pbgbjw.js","/_next/static/chunks/357gkpwwfx19i.js"],"TTSStudio"]
+5:I[20497,["/_next/static/chunks/2q1mt1favngdx.js","/_next/static/chunks/0n483ivefo0-k.js","/_next/static/chunks/267k_9nadfz4u.js"],"OutletBoundary"]
+6:"$Sreact.suspense"
+0:{"rsc":["$","$1","c",{"children":[["$","div",null,{"className":"flex h-screen flex-col bg-background text-foreground font-sans overflow-hidden","children":[["$","$L2",null,{}],["$","div",null,{"className":"flex flex-1 overflow-hidden","children":[["$","$L3",null,{}],["$","main",null,{"className":"flex-1 bg-muted/30 p-6 overflow-hidden flex flex-col","children":["$","$L4",null,{}]}]]}]]}],[["$","script","script-0",{"src":"/_next/static/chunks/1uul906pbgbjw.js","async":true}],["$","script","script-1",{"src":"/_next/static/chunks/357gkpwwfx19i.js","async":true}]],["$","$L5",null,{"children":["$","$6",null,{"name":"Next.MetadataOutlet","children":"$@7"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"6FW9VwNfV39dQA6ZuORNu"}
+7:null
