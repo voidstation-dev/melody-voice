@@ -167,8 +167,12 @@ function JobItem({ job, onReparse }: { job: TTSJob; onReparse?: (jobText: string
         URL.revokeObjectURL(objectUrl);
         return;
       }
+      const currentAudio = audioRef.current;
       audioBlobUrlRef.current = objectUrl;
-      audioRef.current.src = objectUrl;
+      if (currentAudio) {
+        // eslint-disable-next-line react-hooks/immutability
+        currentAudio.src = objectUrl;
+      }
     }
     await audioRef.current.play();
   };

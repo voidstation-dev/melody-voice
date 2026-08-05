@@ -20,7 +20,7 @@ export function useTextFileDrop({
   const [isValidDrag, setIsValidDrag] = useState(false);
   const dragCounter = useRef(0);
 
-  const processFiles = async (files: File[]) => {
+  const processFiles = useCallback(async (files: File[]) => {
     const validFiles: ImportedTextFile[] = [];
     const errors: TextImportError[] = [];
 
@@ -78,7 +78,7 @@ export function useTextFileDrop({
 
     if (validFiles.length > 0) onFiles(validFiles);
     if (errors.length > 0) onErrors(errors);
-  };
+  }, [allowMultiple, maxFileBytes, maxCharacters, onFiles, onErrors]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -118,7 +118,7 @@ export function useTextFileDrop({
         await processFiles(Array.from(e.dataTransfer.files));
       }
     },
-    [allowMultiple, maxFileBytes, maxCharacters, onFiles, onErrors]
+    [processFiles]
   );
 
   return {

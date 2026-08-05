@@ -152,6 +152,7 @@ export function BatchImportModal({
 
   useEffect(() => {
     if (isOpen && files.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLocalFiles([...files]);
       setSelectedIds(new Set(files.map((f) => f.id)));
       setIsSubmitting(false);

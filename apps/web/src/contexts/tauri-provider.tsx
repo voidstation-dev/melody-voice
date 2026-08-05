@@ -174,6 +174,7 @@ export function TauriProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     mountedRef.current = true;
     const desktop = hasTauriRuntime();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsDesktop(desktop);
 
     if (!desktop) {

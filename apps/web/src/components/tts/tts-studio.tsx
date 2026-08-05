@@ -111,6 +111,7 @@ export function TTSStudio() {
 
   useEffect(() => {
     const savedText = localStorage.getItem("melody_text");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (savedText) setText(savedText);
   }, []);
 
